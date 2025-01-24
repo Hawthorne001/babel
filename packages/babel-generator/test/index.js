@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import fixtures from "@babel/helper-fixtures";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
-import { commonJS, describeBabel7NoESM } from "$repo-utils";
+import { commonJS, describeBabel7NoESM, itBabel7, itBabel8 } from "$repo-utils";
 import { encode } from "@jridgewell/sourcemap-codec";
 
 import _generate from "../lib/index.js";
@@ -42,6 +42,7 @@ describe("generation", function () {
     expect(generated.map).toMatchInlineSnapshot(`
       Object {
         "file": undefined,
+        "ignoreList": Array [],
         "mappings": "AAAA,SAASA,EAAEA,CAAEC,GAAG,EAAE;EAAEC,OAAO,CAACC,GAAG,CAACF,GAAG,CAAC;AAAE;ACAtCD,EAAE,CAAC,OAAO,CAAC",
         "names": Array [
           "hi",
@@ -330,6 +331,7 @@ describe("generation", function () {
       Object {
         "__mergedMap": Object {
           "file": undefined,
+          "ignoreList": Array [],
           "mappings": "AAAA,SAASA,IAAGA,CAAA,EAAG;EAAEC,IAAG;AAAE",
           "names": Array [
             "foo",
@@ -350,6 +352,7 @@ describe("generation", function () {
       }",
         "decodedMap": Object {
           "file": undefined,
+          "ignoreList": Array [],
           "mappings": Array [
             Array [
               Array [
@@ -425,6 +428,7 @@ describe("generation", function () {
         },
         "map": Object {
           "file": undefined,
+          "ignoreList": Array [],
           "mappings": "AAAA,SAASA,IAAGA,CAAA,EAAG;EAAEC,IAAG;AAAE",
           "names": Array [
             "foo",
@@ -791,7 +795,7 @@ describe("generation", function () {
     `);
   });
 
-  it("comments without loc3", () => {
+  itBabel7("comments without loc3", () => {
     const ast = parse(
       `
         /** This describes how the endpoint is implemented when the lease is deployed */
@@ -818,6 +822,37 @@ describe("generation", function () {
         /** RANDOM_PORT - Describes an endpoint that becomes a Kubernetes NodePort */
         RANDOM_PORT = 1,
         UNRECOGNIZED = -1,
+      }"
+    `);
+  });
+
+  itBabel8("comments without loc3", () => {
+    const ast = parse(
+      `
+        /** This describes how the endpoint is implemented when the lease is deployed */
+        export enum Endpoint_Kind {
+          /** SHARED_HTTP - Describes an endpoint that becomes a Kubernetes Ingress */
+          SHARED_HTTP = 0,
+          /** RANDOM_PORT - Describes an endpoint that becomes a Kubernetes NodePort */
+          RANDOM_PORT = 1,
+          UNRECOGNIZED = -1,
+        }
+      `,
+      { sourceType: "module", plugins: ["typescript"] },
+    );
+
+    for (const comment of ast.comments) {
+      comment.loc = undefined;
+    }
+
+    expect(generate(ast).code).toMatchInlineSnapshot(`
+      "/** This describes how the endpoint is implemented when the lease is deployed */
+      export enum Endpoint_Kind {
+        /** SHARED_HTTP - Describes an endpoint that becomes a Kubernetes Ingress */
+        SHARED_HTTP = 0,
+        /** RANDOM_PORT - Describes an endpoint that becomes a Kubernetes NodePort */
+        RANDOM_PORT = 1,
+        UNRECOGNIZED = -1
       }"
     `);
   });
@@ -901,6 +936,7 @@ describe("generation", function () {
     ).toMatchInlineSnapshot(`
       Object {
         "file": undefined,
+        "ignoreList": Array [],
         "mappings": "AAAA,IAAIA,CAAC,GAAGC,CAAA,IAAAA,CAAA,GAAJA,CAAC",
         "names": Array [
           "t",
@@ -1192,7 +1228,7 @@ describe("programmatic generation", function () {
         ]),
       );
       const output = generate(typeStatement).code;
-      expect(output).toBe("((number & boolean) | null)[]");
+      expect(output).toBe("(number & boolean | null)[]");
     });
     it("wraps around intersection for array", () => {
       const typeStatement = t.tsArrayType(
@@ -1324,7 +1360,7 @@ describe("programmatic generation", function () {
         t.sequenceExpression([t.objectExpression([]), t.numericLiteral(1)]),
       );
       const output = generate(arrowFunctionExpression).code;
-      expect(output).toBe("() => (({}), 1)");
+      expect(output).toBe("() => ({}, 1)");
     });
   });
 
@@ -1535,9 +1571,9 @@ describe("programmatic generation", function () {
         concise: true,
       }).code,
     ).toMatchInlineSnapshot(`
-        "return (/*new
-        line*/ val );"
-      `);
+      "return ( /*new
+      line*/ val );"
+    `);
   });
 
   it("correctly indenting when `retainLines`", () => {

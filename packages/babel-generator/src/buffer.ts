@@ -1,9 +1,13 @@
 import type SourceMap from "./source-map.ts";
+
+// We inline this package
+// eslint-disable-next-line import/no-extraneous-dependencies
 import * as charcodes from "charcodes";
 
 export type Pos = {
   line: number;
   column: number;
+  index: number;
 };
 export type Loc = {
   start?: Pos;
@@ -262,6 +266,7 @@ export default class Buffer {
     this._last = str.charCodeAt(len - 1);
 
     if (++this._appendCount > 4096) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       +this._str; // Unexplainable huge performance boost. Ref: https://github.com/davidmarkclements/flatstr License: MIT
       this._buf += this._str;
       this._str = str;
@@ -469,18 +474,6 @@ export default class Buffer {
     if (!this._map) return;
 
     this._normalizePosition(prop, loc, columnOffset);
-  }
-
-  /**
-   * Call a callback with a specific source location
-   */
-
-  withSource(prop: "start" | "end", loc: Loc, cb: () => void): void {
-    if (this._map) {
-      this.source(prop, loc);
-    }
-
-    cb();
   }
 
   _normalizePosition(prop: "start" | "end", loc: Loc, columnOffset: number) {

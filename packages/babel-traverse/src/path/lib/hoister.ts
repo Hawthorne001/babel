@@ -1,3 +1,5 @@
+// Remove this file in Babel 8
+
 import { react } from "@babel/types";
 import {
   cloneNode,
@@ -109,7 +111,7 @@ export default class PathHoister<T extends t.Node = t.Node> {
       }
 
       // deopt: These scopes are set in the visitor on const violations
-      if (this.breakOnScopePaths.indexOf(scope.path) >= 0) {
+      if (this.breakOnScopePaths.includes(scope.path)) {
         break;
       }
     } while ((scope = scope.parent));
@@ -260,6 +262,8 @@ export default class PathHoister<T extends t.Node = t.Node> {
 
     this.path.replaceWith(cloneNode(uid));
 
+    // @ts-expect-error TS cannot refine the type of `attached`
+    // TODO: Should we use `attached.isVariableDeclaration()`?
     return attachTo.isVariableDeclarator()
       ? attached.get("init")
       : attached.get("declarations.0.init");

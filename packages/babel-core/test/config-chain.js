@@ -4,11 +4,16 @@ import path from "path";
 import { fileURLToPath } from "url";
 import * as babel from "../lib/index.js";
 import rimraf from "rimraf";
+import { itBabel7, itBabel8, itGte, itLt } from "$repo-utils";
 
 import _getTargets from "@babel/helper-compilation-targets";
 const getTargets = _getTargets.default || _getTargets;
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// "minNodeVersion": "22.0.0" <-- For Ctrl+F when dropping node 20
+const nodeGte22_12 = itGte("22.12.0");
+const nodeLt22_12 = itLt("22.12.0");
 
 import { isMJS, loadOptionsAsync, skipUnsupportedESM } from "./helpers/esm.js";
 
@@ -1164,7 +1169,23 @@ describe("buildConfigChain", function () {
         },
       );
 
-      test("should not load babel.config.mjs synchronously", async () => {
+      nodeLt22_12(
+        "should not load babel.config.mjs synchronously",
+        async () => {
+          const { cwd, tmp, config } = await getTemp(
+            "babel-test-load-config-sync-babel.config.mjs",
+          );
+          const filename = tmp("src.js");
+
+          await config("babel.config.mjs");
+
+          expect(() => loadOptionsSync({ filename, cwd })).toThrow(
+            /is only supported when running Babel asynchronously/,
+          );
+        },
+      );
+
+      nodeGte22_12("should load babel.config.mjs synchronously", async () => {
         const { cwd, tmp, config } = await getTemp(
           "babel-test-load-config-sync-babel.config.mjs",
         );
@@ -1172,9 +1193,13 @@ describe("buildConfigChain", function () {
 
         await config("babel.config.mjs");
 
-        expect(() => loadOptionsSync({ filename, cwd })).toThrow(
-          /is only supported when running Babel asynchronously/,
-        );
+        expect(loadOptionsSync({ filename, cwd })).toEqual({
+          ...getDefaults(),
+          filename,
+          cwd,
+          root: cwd,
+          comments: true,
+        });
       });
 
       test.each([
@@ -1260,7 +1285,7 @@ describe("buildConfigChain", function () {
         });
       });
 
-      test("should not load .babelrc.mjs synchronously", async () => {
+      nodeLt22_12("should not load .babelrc.mjs synchronously", async () => {
         const { cwd, tmp, config } = await getTemp(
           "babel-test-load-config-sync-.babelrc.mjs",
         );
@@ -1271,6 +1296,23 @@ describe("buildConfigChain", function () {
         expect(() => loadOptionsSync({ filename, cwd })).toThrow(
           /is only supported when running Babel asynchronously/,
         );
+      });
+
+      nodeGte22_12("should load .babelrc.mjs synchronously", async () => {
+        const { cwd, tmp, config } = await getTemp(
+          "babel-test-load-config-sync-.babelrc.mjs",
+        );
+        const filename = tmp("src.js");
+
+        await config(".babelrc.mjs");
+
+        expect(loadOptionsSync({ filename, cwd })).toEqual({
+          ...getDefaults(),
+          filename,
+          cwd,
+          root: cwd,
+          comments: true,
+        });
       });
 
       test.each(
@@ -1305,12 +1347,33 @@ describe("buildConfigChain", function () {
         );
       });
 
-      it("should load .babelignore", () => {
-        const filename = fixture("config-files", "babelignore", "src.js");
+      itBabel7("should load .babelignore", () => {
+        const loadOptions = name => {
+          const filename = fixture("config-files", "babelignore", name);
+          return loadOptionsSync({ filename, cwd: path.dirname(filename) });
+        };
 
-        expect(
-          loadOptionsSync({ filename, cwd: path.dirname(filename) }),
-        ).toBeNull();
+        expect(loadOptions("src.js")).toBeNull();
+        expect(loadOptions("bar.js")).not.toBeNull();
+        expect(loadOptions("#baz.js")).not.toBeNull();
+
+        // This changes in Babel 8
+        expect(loadOptions("foo.js#.js")).not.toBeNull();
+        expect(loadOptions("foo.js")).toBeNull();
+      });
+
+      itBabel8("should load .babelignore", () => {
+        const loadOptions = name => {
+          const filename = fixture("config-files", "babelignore", name);
+          return loadOptionsSync({ filename, cwd: path.dirname(filename) });
+        };
+
+        expect(loadOptions("src.js")).toBeNull();
+        expect(loadOptions("bar.js")).not.toBeNull();
+        expect(loadOptions("#baz.js")).not.toBeNull();
+
+        expect(loadOptions("foo.js#.js")).toBeNull();
+        expect(loadOptions("foo.js")).not.toBeNull();
       });
 
       test.each(

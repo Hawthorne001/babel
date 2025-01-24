@@ -221,6 +221,7 @@ export type Node =
   | TSConstructorType
   | TSDeclareFunction
   | TSDeclareMethod
+  | TSEnumBody
   | TSEnumDeclaration
   | TSEnumMember
   | TSExportAssignment
@@ -375,10 +376,8 @@ export interface BreakStatement extends BaseNode {
 export interface CallExpression extends BaseNode {
   type: "CallExpression";
   callee: Expression | Super | V8IntrinsicIdentifier;
-  arguments: Array<
-    Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder
-  >;
-  optional?: true | false | null;
+  arguments: Array<Expression | SpreadElement | ArgumentPlaceholder>;
+  optional?: boolean | null;
   typeArguments?: TypeParameterInstantiation | null;
   typeParameters?: TSTypeParameterInstantiation | null;
 }
@@ -550,16 +549,14 @@ export interface MemberExpression extends BaseNode {
   object: Expression | Super;
   property: Expression | Identifier | PrivateName;
   computed: boolean;
-  optional?: true | false | null;
+  optional?: boolean | null;
 }
 
 export interface NewExpression extends BaseNode {
   type: "NewExpression";
   callee: Expression | Super | V8IntrinsicIdentifier;
-  arguments: Array<
-    Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder
-  >;
-  optional?: true | false | null;
+  arguments: Array<Expression | SpreadElement | ArgumentPlaceholder>;
+  optional?: boolean | null;
   typeArguments?: TypeParameterInstantiation | null;
   typeParameters?: TSTypeParameterInstantiation | null;
 }
@@ -811,6 +808,7 @@ export interface ClassDeclaration extends BaseNode {
 export interface ExportAllDeclaration extends BaseNode {
   type: "ExportAllDeclaration";
   source: StringLiteral;
+  /** @deprecated */
   assertions?: Array<ImportAttribute> | null;
   attributes?: Array<ImportAttribute> | null;
   exportKind?: "type" | "value" | null;
@@ -833,6 +831,7 @@ export interface ExportNamedDeclaration extends BaseNode {
     ExportSpecifier | ExportDefaultSpecifier | ExportNamespaceSpecifier
   >;
   source?: StringLiteral | null;
+  /** @deprecated */
   assertions?: Array<ImportAttribute> | null;
   attributes?: Array<ImportAttribute> | null;
   exportKind?: "type" | "value" | null;
@@ -859,6 +858,7 @@ export interface ImportDeclaration extends BaseNode {
     ImportSpecifier | ImportDefaultSpecifier | ImportNamespaceSpecifier
   >;
   source: StringLiteral;
+  /** @deprecated */
   assertions?: Array<ImportAttribute> | null;
   attributes?: Array<ImportAttribute> | null;
   importKind?: "type" | "typeof" | "value" | null;
@@ -1003,9 +1003,7 @@ export interface OptionalMemberExpression extends BaseNode {
 export interface OptionalCallExpression extends BaseNode {
   type: "OptionalCallExpression";
   callee: Expression;
-  arguments: Array<
-    Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder
-  >;
+  arguments: Array<Expression | SpreadElement | ArgumentPlaceholder>;
   optional: boolean;
   typeArguments?: TypeParameterInstantiation | null;
   typeParameters?: TSTypeParameterInstantiation | null;
@@ -1188,12 +1186,18 @@ export interface DeclareExportDeclaration extends BaseNode {
   declaration?: Flow | null;
   specifiers?: Array<ExportSpecifier | ExportNamespaceSpecifier> | null;
   source?: StringLiteral | null;
+  attributes?: Array<ImportAttribute> | null;
+  /** @deprecated */
+  assertions?: Array<ImportAttribute> | null;
   default?: boolean | null;
 }
 
 export interface DeclareExportAllDeclaration extends BaseNode {
   type: "DeclareExportAllDeclaration";
   source: StringLiteral;
+  attributes?: Array<ImportAttribute> | null;
+  /** @deprecated */
+  assertions?: Array<ImportAttribute> | null;
   exportKind?: "type" | "value" | null;
 }
 
@@ -1552,10 +1556,8 @@ export interface JSXOpeningElement extends BaseNode {
   name: JSXIdentifier | JSXMemberExpression | JSXNamespacedName;
   attributes: Array<JSXAttribute | JSXSpreadAttribute>;
   selfClosing: boolean;
-  typeParameters?:
-    | TypeParameterInstantiation
-    | TSTypeParameterInstantiation
-    | null;
+  typeArguments?: TypeParameterInstantiation | null;
+  typeParameters?: TSTypeParameterInstantiation | null;
 }
 
 export interface JSXSpreadAttribute extends BaseNode {
@@ -1601,6 +1603,9 @@ export interface Placeholder extends BaseNode {
     | "ClassBody"
     | "Pattern";
   name: Identifier;
+  decorators?: Array<Decorator> | null;
+  optional?: boolean | null;
+  typeAnnotation?: TypeAnnotation | TSTypeAnnotation | Noop | null;
 }
 
 export interface V8IntrinsicIdentifier extends BaseNode {
@@ -2000,10 +2005,16 @@ export interface TSTypeAssertion extends BaseNode {
   expression: Expression;
 }
 
+export interface TSEnumBody extends BaseNode {
+  type: "TSEnumBody";
+  members: Array<TSEnumMember>;
+}
+
 export interface TSEnumDeclaration extends BaseNode {
   type: "TSEnumDeclaration";
   id: Identifier;
   members: Array<TSEnumMember>;
+  body?: TSEnumBody | null;
   const?: boolean | null;
   declare?: boolean | null;
   initializer?: Expression | null;
@@ -2021,6 +2032,7 @@ export interface TSModuleDeclaration extends BaseNode {
   body: TSModuleBlock | TSModuleDeclaration;
   declare?: boolean | null;
   global?: boolean | null;
+  kind: "global" | "module" | "namespace";
 }
 
 export interface TSModuleBlock extends BaseNode {
@@ -2398,7 +2410,8 @@ export type Declaration =
   | TSInterfaceDeclaration
   | TSTypeAliasDeclaration
   | TSEnumDeclaration
-  | TSModuleDeclaration;
+  | TSModuleDeclaration
+  | TSImportEqualsDeclaration;
 export type PatternLike =
   | Identifier
   | RestElement
@@ -2682,6 +2695,7 @@ export type TypeScript =
   | TSAsExpression
   | TSSatisfiesExpression
   | TSTypeAssertion
+  | TSEnumBody
   | TSEnumDeclaration
   | TSEnumMember
   | TSModuleDeclaration
@@ -4044,6 +4058,7 @@ export interface ParentMaps {
     | ObjectMethod
     | ObjectPattern
     | ObjectProperty
+    | Placeholder
     | RestElement
     | TSDeclareMethod
     | TSParameterProperty;
@@ -4691,6 +4706,8 @@ export interface ParentMaps {
     | WithStatement
     | YieldExpression;
   ImportAttribute:
+    | DeclareExportAllDeclaration
+    | DeclareExportDeclaration
     | ExportAllDeclaration
     | ExportNamedDeclaration
     | ImportDeclaration;
@@ -5039,13 +5056,7 @@ export interface ParentMaps {
     | JSXClosingElement
     | JSXMemberExpression
     | JSXOpeningElement;
-  JSXNamespacedName:
-    | CallExpression
-    | JSXAttribute
-    | JSXClosingElement
-    | JSXOpeningElement
-    | NewExpression
-    | OptionalCallExpression;
+  JSXNamespacedName: JSXAttribute | JSXClosingElement | JSXOpeningElement;
   JSXOpeningElement: JSXElement;
   JSXOpeningFragment: JSXFragment;
   JSXSpreadAttribute: JSXOpeningElement;
@@ -5438,6 +5449,7 @@ export interface ParentMaps {
     | Identifier
     | ObjectMethod
     | ObjectPattern
+    | Placeholder
     | RestElement
     | TSDeclareFunction
     | TSDeclareMethod;
@@ -6965,6 +6977,7 @@ export interface ParentMaps {
     | WhileStatement
     | WithStatement;
   TSDeclareMethod: ClassBody;
+  TSEnumBody: TSEnumDeclaration;
   TSEnumDeclaration:
     | BlockStatement
     | DoWhileStatement
@@ -6980,7 +6993,7 @@ export interface ParentMaps {
     | TSModuleBlock
     | WhileStatement
     | WithStatement;
-  TSEnumMember: TSEnumDeclaration;
+  TSEnumMember: TSEnumBody | TSEnumDeclaration;
   TSExportAssignment:
     | BlockStatement
     | DoWhileStatement
@@ -7044,6 +7057,7 @@ export interface ParentMaps {
   TSImportEqualsDeclaration:
     | BlockStatement
     | DoWhileStatement
+    | ExportNamedDeclaration
     | ForInStatement
     | ForOfStatement
     | ForStatement
@@ -7734,6 +7748,7 @@ export interface ParentMaps {
     | Identifier
     | ObjectMethod
     | ObjectPattern
+    | Placeholder
     | RestElement
     | TSCallSignatureDeclaration
     | TSConstructSignatureDeclaration
@@ -8478,6 +8493,7 @@ export interface ParentMaps {
     | Identifier
     | ObjectMethod
     | ObjectPattern
+    | Placeholder
     | RestElement
     | TypeCastExpression
     | TypeParameter;

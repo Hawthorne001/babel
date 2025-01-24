@@ -1,8 +1,5 @@
 import semver, { type SemVer } from "semver";
-// @ts-expect-error Fixme: TS can not infer types from ../data/core-js-compat.js
-// but we can't import core-js-compat/data.json because JSON imports do
-// not work on Node 14
-import corejs3Polyfills from "../data/core-js-compat.js";
+import corejs3Polyfills from "core-js-compat/data.json" with { type: "json" };
 import { plugins as pluginsList } from "./plugins-compat-data.ts";
 import moduleTransformations from "./module-transformations.ts";
 import {
@@ -57,7 +54,7 @@ function flatMap<T, U>(array: Array<T>, fn: (item: T) => Array<U>): Array<U> {
 }
 
 export const normalizePluginName = (plugin: string) =>
-  plugin.replace(/^(@babel\/|babel-)(plugin-)?/, "");
+  plugin.replace(/^(?:@babel\/|babel-)(?:plugin-)?/, "");
 
 const expandIncludesAndExcludes = (
   filterList: PluginListOption = [],
@@ -74,7 +71,7 @@ const expandIncludesAndExcludes = (
     if (typeof filter === "string") {
       try {
         re = new RegExp(`^${normalizePluginName(filter)}$`);
-      } catch (e) {
+      } catch (_) {
         invalidFilters.push(filter);
         return [];
       }
@@ -108,7 +105,7 @@ export const checkDuplicateIncludeExcludes = (
   include: Array<string> = [],
   exclude: Array<string> = [],
 ) => {
-  const duplicates = include.filter(opt => exclude.indexOf(opt) >= 0);
+  const duplicates = include.filter(opt => exclude.includes(opt));
 
   v.invariant(
     duplicates.length === 0,
@@ -243,6 +240,14 @@ export function normalizeCoreJSOption(
 }
 
 export default function normalizeOptions(opts: Options) {
+  if (process.env.BABEL_8_BREAKING) {
+    v.invariant(
+      !Object.hasOwn(opts, "bugfixes"),
+      "The 'bugfixes' option has been removed, and now bugfix plugins are" +
+        " always enabled. Please remove it from your config.",
+    );
+  }
+
   v.validateTopLevelOptions(opts, TopLevelOptions);
 
   const useBuiltIns = validateUseBuiltInsOption(opts.useBuiltIns);
@@ -266,14 +271,10 @@ export default function normalizeOptions(opts: Options) {
   if (!process.env.BABEL_8_BREAKING) {
     v.validateBooleanOption("loose", opts.loose);
     v.validateBooleanOption("spec", opts.spec);
+    v.validateBooleanOption("bugfixes", opts.bugfixes);
   }
 
   return {
-    bugfixes: v.validateBooleanOption(
-      TopLevelOptions.bugfixes,
-      opts.bugfixes,
-      process.env.BABEL_8_BREAKING ? true : false,
-    ),
     configPath: v.validateStringOption(
       TopLevelOptions.configPath,
       opts.configPath,

@@ -1,5 +1,5 @@
 import { template, types as t } from "@babel/core";
-import type { NodePath, Visitor } from "@babel/traverse";
+import type { NodePath, Visitor } from "@babel/core";
 
 import {
   iifeVisitor,
@@ -303,7 +303,7 @@ export default function convertFunctionRest(path: NodePath<t.Function>) {
 
   const restPath = path.get(
     `params.${node.params.length - 1}.argument`,
-  ) as NodePath<t.Pattern | t.Identifier>;
+  ) as NodePath<t.ArrayPattern | t.ObjectPattern | t.Identifier>;
 
   if (!restPath.isIdentifier()) {
     const shadowedParams = new Set<string>();
@@ -323,7 +323,9 @@ export default function convertFunctionRest(path: NodePath<t.Function>) {
       path.ensureBlock();
       path.set(
         "body",
-        t.blockStatement([buildScopeIIFE(shadowedParams, path.node.body)]),
+        t.blockStatement([
+          buildScopeIIFE(shadowedParams, path.node.body as t.BlockStatement),
+        ]),
       );
     }
   }

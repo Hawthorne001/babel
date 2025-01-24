@@ -1,8 +1,7 @@
-import { template, traverse, types as t } from "@babel/core";
-import type { File } from "@babel/core";
-import type { NodePath, Visitor, Scope } from "@babel/traverse";
+import { template, types as t } from "@babel/core";
+import type { File, NodePath, Visitor, Scope } from "@babel/core";
+import { visitors } from "@babel/traverse";
 import ReplaceSupers from "@babel/helper-replace-supers";
-import environmentVisitor from "@babel/helper-environment-visitor";
 import memberExpressionToFunctions from "@babel/helper-member-expression-to-functions";
 import type {
   Handler,
@@ -202,18 +201,14 @@ export interface PrivateNameVisitorState<V> {
 // class redeclares the same private name, it will hand off traversal to the
 // restricted visitor (which doesn't traverse the inner class's inner scope).
 export function privateNameVisitorFactory<S, V>(
-  visitor: Visitor<PrivateNameVisitorState<V> & S>,
+  visitor: Visitor<PrivateNameVisitorState<V & PrivateNameMetadata> & S>,
 ) {
   // Traverses the outer portion of a class, without touching the class's inner
   // scope, for private names.
-  const nestedVisitor = traverse.visitors.merge([
-    { ...visitor },
-    environmentVisitor,
-  ]);
+  const nestedVisitor = visitors.environmentVisitor({ ...visitor });
 
-  // @ts-expect-error: TS2590: Expression produces a union type that is too complex to represent.
   const privateNameVisitor: Visitor<
-    PrivateNameVisitorState<PrivateNameMetadata> & S
+    PrivateNameVisitorState<V & PrivateNameMetadata> & S
   > = {
     ...visitor,
 
@@ -282,7 +277,7 @@ const privateNameVisitor = privateNameVisitorFactory<
     }
     const { name } = node.id;
     if (!privateNamesMap.has(name)) return;
-    if (redeclared && redeclared.includes(name)) return;
+    if (redeclared?.includes(name)) return;
 
     this.handle(parentPath, noDocumentAll);
   },
@@ -334,7 +329,7 @@ const privateInVisitor = privateNameVisitorFactory<
     const { name } = left.id;
 
     if (!privateNamesMap.has(name)) return;
-    if (redeclared && redeclared.includes(name)) return;
+    if (redeclared?.includes(name)) return;
 
     // if there are any local variable shadowing classRef, unshadow it
     // see #12960
@@ -408,6 +403,16 @@ function buildStaticPrivateFieldAccess<N extends t.Expression>(
   return t.memberExpression(expr, t.identifier("_"));
 }
 
+function autoInherits<
+  Member extends { node: t.Node },
+  Result extends t.Node,
+  Fn extends (member: Member, ...args: unknown[]) => Result,
+>(fn: Fn): Fn {
+  return function (this: ThisParameterType<Fn>, member) {
+    return t.inherits(fn.apply(this, arguments as any), member.node);
+  } as Fn;
+}
+
 const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
   {
     memoise(member, count) {
@@ -432,7 +437,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
       return t.cloneNode(object);
     },
 
-    get(member) {
+    get: autoInherits(function (member) {
       const {
         classRef,
         privateNamesMap,
@@ -440,7 +445,8 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
         innerBinding,
         noUninitializedPrivateFieldAccess,
       } = this;
-      const { name } = (member.node.property as t.PrivateName).id;
+      const privateName = member.node.property as t.PrivateName;
+      const { name } = privateName.id;
       const {
         id,
         static: isStatic,
@@ -450,6 +456,9 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
         setId,
       } = privateNamesMap.get(name);
       const isGetterOrSetter = getId || setId;
+
+      const cloneId = (id: t.Identifier) =>
+        t.inherits(t.cloneNode(id), privateName);
 
       if (isStatic) {
         // if there are any local variable shadowing classRef, unshadow it
@@ -467,7 +476,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
           return t.callExpression(file.addHelper(helperName), [
             this.receiver(member),
             t.cloneNode(classRef),
-            t.cloneNode(id),
+            cloneId(id),
           ]);
         }
 
@@ -478,7 +487,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
         if (!isMethod) {
           if (skipCheck) {
             return buildStaticPrivateFieldAccess(
-              t.cloneNode(id),
+              cloneId(id),
               noUninitializedPrivateFieldAccess,
             );
           }
@@ -487,7 +496,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
             t.callExpression(file.addHelper("assertClassBrand"), [
               t.cloneNode(classRef),
               receiver,
-              t.cloneNode(id),
+              cloneId(id),
             ]),
             noUninitializedPrivateFieldAccess,
           );
@@ -495,12 +504,12 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
 
         if (getId) {
           if (skipCheck) {
-            return t.callExpression(t.cloneNode(getId), [receiver]);
+            return t.callExpression(cloneId(getId), [receiver]);
           }
           return t.callExpression(file.addHelper("classPrivateGetter"), [
             t.cloneNode(classRef),
             receiver,
-            t.cloneNode(getId),
+            cloneId(getId),
           ]);
         }
 
@@ -516,11 +525,11 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
           ]);
         }
 
-        if (skipCheck) return t.cloneNode(id);
+        if (skipCheck) return cloneId(id);
         return t.callExpression(file.addHelper("assertClassBrand"), [
           t.cloneNode(classRef),
           receiver,
-          t.cloneNode(id),
+          cloneId(id),
         ]);
       }
 
@@ -535,40 +544,40 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
           if (!process.env.BABEL_8_BREAKING && !newHelpers(file)) {
             return t.callExpression(file.addHelper("classPrivateFieldGet"), [
               this.receiver(member),
-              t.cloneNode(id),
+              cloneId(id),
             ]);
           }
           return t.callExpression(file.addHelper("classPrivateGetter"), [
             t.cloneNode(id),
             this.receiver(member),
-            t.cloneNode(getId),
+            cloneId(getId),
           ]);
         }
         if (!process.env.BABEL_8_BREAKING && !newHelpers(file)) {
           return t.callExpression(file.addHelper("classPrivateMethodGet"), [
             this.receiver(member),
             t.cloneNode(id),
-            t.cloneNode(methodId),
+            cloneId(methodId),
           ]);
         }
         return t.callExpression(file.addHelper("assertClassBrand"), [
           t.cloneNode(id),
           this.receiver(member),
-          t.cloneNode(methodId),
+          cloneId(methodId),
         ]);
       }
       if (process.env.BABEL_8_BREAKING || newHelpers(file)) {
         return t.callExpression(file.addHelper("classPrivateFieldGet2"), [
-          t.cloneNode(id),
+          cloneId(id),
           this.receiver(member),
         ]);
       }
 
       return t.callExpression(file.addHelper("classPrivateFieldGet"), [
         this.receiver(member),
-        t.cloneNode(id),
+        cloneId(id),
       ]);
-    },
+    }),
 
     boundGet(member) {
       this.memoise(member, 1);
@@ -579,14 +588,15 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
       );
     },
 
-    set(member, value) {
+    set: autoInherits(function (member, value) {
       const {
         classRef,
         privateNamesMap,
         file,
         noUninitializedPrivateFieldAccess,
       } = this;
-      const { name } = (member.node.property as t.PrivateName).id;
+      const privateName = member.node.property as t.PrivateName;
+      const { name } = privateName.id;
       const {
         id,
         static: isStatic,
@@ -595,6 +605,9 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
         getId,
       } = privateNamesMap.get(name);
       const isGetterOrSetter = getId || setId;
+
+      const cloneId = (id: t.Identifier) =>
+        t.inherits(t.cloneNode(id), privateName);
 
       if (isStatic) {
         if (!process.env.BABEL_8_BREAKING && !newHelpers(file)) {
@@ -606,7 +619,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
           return t.callExpression(file.addHelper(helperName), [
             this.receiver(member),
             t.cloneNode(classRef),
-            t.cloneNode(id),
+            cloneId(id),
             value,
           ]);
         }
@@ -634,7 +647,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
           }
           return t.callExpression(file.addHelper("classPrivateSetter"), [
             t.cloneNode(classRef),
-            t.cloneNode(setId),
+            cloneId(setId),
             receiver,
             value,
           ]);
@@ -642,7 +655,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
         return t.assignmentExpression(
           "=",
           buildStaticPrivateFieldAccess(
-            t.cloneNode(id),
+            cloneId(id),
             noUninitializedPrivateFieldAccess,
           ),
           skipCheck
@@ -659,13 +672,13 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
           if (!process.env.BABEL_8_BREAKING && !newHelpers(file)) {
             return t.callExpression(file.addHelper("classPrivateFieldSet"), [
               this.receiver(member),
-              t.cloneNode(id),
+              cloneId(id),
               value,
             ]);
           }
           return t.callExpression(file.addHelper("classPrivateSetter"), [
             t.cloneNode(id),
-            t.cloneNode(setId),
+            cloneId(setId),
             this.receiver(member),
             value,
           ]);
@@ -679,7 +692,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
 
       if (process.env.BABEL_8_BREAKING || newHelpers(file)) {
         return t.callExpression(file.addHelper("classPrivateFieldSet2"), [
-          t.cloneNode(id),
+          cloneId(id),
           this.receiver(member),
           value,
         ]);
@@ -687,10 +700,10 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
 
       return t.callExpression(file.addHelper("classPrivateFieldSet"), [
         this.receiver(member),
-        t.cloneNode(id),
+        cloneId(id),
         value,
       ]);
-    },
+    }),
 
     destructureSet(member) {
       const {
@@ -699,13 +712,17 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
         file,
         noUninitializedPrivateFieldAccess,
       } = this;
-      const { name } = (member.node.property as t.PrivateName).id;
+      const privateName = member.node.property as t.PrivateName;
+      const { name } = privateName.id;
       const {
         id,
         static: isStatic,
         method: isMethod,
         setId,
       } = privateNamesMap.get(name);
+
+      const cloneId = (id: t.Identifier) =>
+        t.inherits(t.cloneNode(id), privateName);
 
       if (!process.env.BABEL_8_BREAKING && !newHelpers(file)) {
         if (isStatic) {
@@ -725,7 +742,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
             t.callExpression(helper, [
               this.receiver(member),
               t.cloneNode(classRef),
-              t.cloneNode(id),
+              cloneId(id),
             ]),
             t.identifier("value"),
           );
@@ -734,7 +751,7 @@ const privateNameHandlerSpec: Handler<PrivateNameState & Receiver> & Receiver =
         return t.memberExpression(
           t.callExpression(file.addHelper("classPrivateFieldDestructureSet"), [
             this.receiver(member),
-            t.cloneNode(id),
+            cloneId(id),
           ]),
           t.identifier("value"),
         );
@@ -969,17 +986,20 @@ function buildPrivateInstanceFieldInitSpec(
   }
 
   const helper = state.addHelper("classPrivateFieldInitSpec");
-  return inheritPropComments(
-    t.expressionStatement(
-      t.callExpression(helper, [
-        t.thisExpression(),
-        t.cloneNode(id),
-        process.env.BABEL_8_BREAKING || newHelpers(state)
-          ? value
-          : template.expression.ast`{ writable: true, value: ${value} }`,
-      ]),
+  return inheritLoc(
+    inheritPropComments(
+      t.expressionStatement(
+        t.callExpression(helper, [
+          t.thisExpression(),
+          inheritLoc(t.cloneNode(id), prop.node.key),
+          process.env.BABEL_8_BREAKING || newHelpers(state)
+            ? value
+            : template.expression.ast`{ writable: true, value: ${value} }`,
+        ]),
+      ),
+      prop,
     ),
-    prop,
+    prop.node,
   );
 }
 
@@ -1154,8 +1174,9 @@ function buildPrivateAccessorInitialization(
   }
 
   const helper = state.addHelper("classPrivateFieldInitSpec");
-  return inheritPropComments(
-    template.statement.ast`${helper}(
+  return inheritLoc(
+    inheritPropComments(
+      template.statement.ast`${helper}(
       ${t.thisExpression()},
       ${t.cloneNode(id)},
       {
@@ -1163,7 +1184,9 @@ function buildPrivateAccessorInitialization(
         set: ${setId ? setId.name : prop.scope.buildUndefinedNode()}
       },
     )` as t.ExpressionStatement,
-    prop,
+      prop,
+    ),
+    prop.node,
   );
 }
 
@@ -1378,38 +1401,35 @@ type ReplaceThisState = {
 
 type ReplaceInnerBindingReferenceState = ReplaceThisState;
 
-const thisContextVisitor = traverse.visitors.merge<ReplaceThisState>([
-  {
-    Identifier(path, state) {
-      if (state.argumentsPath && path.node.name === "arguments") {
-        state.argumentsPath.push(path);
-      }
-    },
-    UnaryExpression(path) {
-      // Replace `delete this` with `true`
-      const { node } = path;
-      if (node.operator === "delete") {
-        const argument = skipTransparentExprWrapperNodes(node.argument);
-        if (t.isThisExpression(argument)) {
-          path.replaceWith(t.booleanLiteral(true));
-        }
-      }
-    },
-    ThisExpression(path, state) {
-      state.needsClassRef = true;
-      path.replaceWith(t.cloneNode(state.thisRef));
-    },
-    MetaProperty(path) {
-      const { node, scope } = path;
-      // if there are `new.target` in static field
-      // we should replace it with `undefined`
-      if (node.meta.name === "new" && node.property.name === "target") {
-        path.replaceWith(scope.buildUndefinedNode());
-      }
-    },
+const thisContextVisitor = visitors.environmentVisitor<ReplaceThisState>({
+  Identifier(path, state) {
+    if (state.argumentsPath && path.node.name === "arguments") {
+      state.argumentsPath.push(path);
+    }
   },
-  environmentVisitor,
-]);
+  UnaryExpression(path) {
+    // Replace `delete this` with `true`
+    const { node } = path;
+    if (node.operator === "delete") {
+      const argument = skipTransparentExprWrapperNodes(node.argument);
+      if (t.isThisExpression(argument)) {
+        path.replaceWith(t.booleanLiteral(true));
+      }
+    }
+  },
+  ThisExpression(path, state) {
+    state.needsClassRef = true;
+    path.replaceWith(t.cloneNode(state.thisRef));
+  },
+  MetaProperty(path) {
+    const { node, scope } = path;
+    // if there are `new.target` in static field
+    // we should replace it with `undefined`
+    if (node.meta.name === "new" && node.property.name === "target") {
+      path.replaceWith(scope.buildUndefinedNode());
+    }
+  },
+});
 
 const innerReferencesVisitor: Visitor<ReplaceInnerBindingReferenceState> = {
   ReferencedIdentifier(path, state) {
@@ -1483,6 +1503,13 @@ function inheritPropComments<T extends t.Node>(node: T, prop: PropPath) {
   return node;
 }
 
+function inheritLoc<T extends t.Node>(node: T, original: t.Node) {
+  node.start = original.start;
+  node.end = original.end;
+  node.loc = original.loc;
+  return node;
+}
+
 /**
  * ClassRefFlag records the requirement of the class binding reference.
  *
@@ -1541,7 +1568,9 @@ export function buildFieldsInitNodes(
   ref ??= t.cloneNode(innerBindingRef);
 
   for (const prop of props) {
-    prop.isClassProperty() && ts.assertFieldTransformed(prop);
+    if (prop.isClassProperty()) {
+      ts.assertFieldTransformed(prop);
+    }
 
     // @ts-expect-error: TS doesn't infer that prop.node is not a StaticBlock
     const isStatic = !t.isStaticBlock?.(prop.node) && prop.node.static;
@@ -1593,7 +1622,7 @@ export function buildFieldsInitNodes(
     // this maybe a bug for ts
     switch (true) {
       case isStaticBlock: {
-        const blockBody = (prop.node as t.StaticBlock).body;
+        const blockBody = prop.node.body;
         // We special-case the single expression case to avoid the iife, since
         // it's common.
         if (blockBody.length === 1 && t.isExpressionStatement(blockBody[0])) {
@@ -1640,16 +1669,13 @@ export function buildFieldsInitNodes(
         // It might still be possible to a computed static fields whose resulting
         // key is "name" or "length", but the assumption is telling us that it's
         // not going to happen.
-        // @ts-expect-error checked in switch
         if (!isNameOrLength(prop.node)) {
-          // @ts-expect-error checked in switch
           staticNodes.push(buildPublicFieldInitLoose(t.cloneNode(ref), prop));
           break;
         }
       // falls through
       case isStatic && isPublic && isField && !setPublicClassFields:
         staticNodes.push(
-          // @ts-expect-error checked in switch
           buildPublicFieldInitSpec(t.cloneNode(ref), prop, file),
         );
         break;
@@ -1681,7 +1707,6 @@ export function buildFieldsInitNodes(
         instanceNodes.unshift(
           buildPrivateMethodInitLoose(
             t.thisExpression(),
-            // @ts-expect-error checked in switch
             prop,
             privateNamesMap,
           ),
@@ -1689,7 +1714,6 @@ export function buildFieldsInitNodes(
         pureStaticNodes.push(
           buildPrivateMethodDeclaration(
             file,
-            // @ts-expect-error checked in switch
             prop,
             privateNamesMap,
             privateFieldsAsSymbolsOrProperties,
@@ -1703,7 +1727,6 @@ export function buildFieldsInitNodes(
         instanceNodes.unshift(
           buildPrivateInstanceMethodInitSpec(
             t.thisExpression(),
-            // @ts-expect-error checked in switch
             prop,
             privateNamesMap,
             file,
@@ -1712,7 +1735,6 @@ export function buildFieldsInitNodes(
         pureStaticNodes.push(
           buildPrivateMethodDeclaration(
             file,
-            // @ts-expect-error checked in switch
             prop,
             privateNamesMap,
             privateFieldsAsSymbolsOrProperties,
@@ -1732,7 +1754,6 @@ export function buildFieldsInitNodes(
         pureStaticNodes.push(
           buildPrivateMethodDeclaration(
             file,
-            // @ts-expect-error checked in switch
             prop,
             privateNamesMap,
             privateFieldsAsSymbolsOrProperties,
@@ -1746,7 +1767,6 @@ export function buildFieldsInitNodes(
         staticNodes.unshift(
           buildPrivateStaticMethodInitLoose(
             t.cloneNode(ref),
-            // @ts-expect-error checked in switch
             prop,
             file,
             privateNamesMap,
@@ -1755,7 +1775,6 @@ export function buildFieldsInitNodes(
         pureStaticNodes.push(
           buildPrivateMethodDeclaration(
             file,
-            // @ts-expect-error checked in switch
             prop,
             privateNamesMap,
             privateFieldsAsSymbolsOrProperties,
@@ -1763,13 +1782,11 @@ export function buildFieldsInitNodes(
         );
         break;
       case isInstance && isPublic && isField && setPublicClassFields:
-        // @ts-expect-error checked in switch
         instanceNodes.push(buildPublicFieldInitLoose(t.thisExpression(), prop));
         break;
       case isInstance && isPublic && isField && !setPublicClassFields:
         lastInstanceNodeReturnsThis = true;
         instanceNodes.push(
-          // @ts-expect-error checked in switch
           buildPublicFieldInitSpec(t.thisExpression(), prop, file),
         );
         break;

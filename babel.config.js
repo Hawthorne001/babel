@@ -13,6 +13,8 @@ if (typeof it === "function") {
 const pathUtils = require("path");
 const fs = require("fs");
 const { parseSync } = require("@babel/core");
+const packageJson = require("./package.json");
+const babel7_8compat = require("./test/babel-7-8-compat/data.json");
 
 function normalize(src) {
   return src.replace(/\//, pathUtils.sep);
@@ -184,6 +186,11 @@ module.exports = function (api) {
       ["@babel/transform-object-rest-spread", { useBuiltIns: true }],
 
       convertESM ? "@babel/transform-export-namespace-from" : null,
+      env !== "standalone"
+        ? ["@babel/plugin-transform-json-modules", { uncheckedRequire: true }]
+        : null,
+
+      require("./scripts/babel-plugin-bit-decorator/plugin.cjs"),
     ].filter(Boolean),
     overrides: [
       {
@@ -250,6 +257,26 @@ module.exports = function (api) {
 
           pluginPackageJsonMacro,
 
+          [
+            pluginRequiredVersionMacro,
+            {
+              allowAny: !process.env.IS_PUBLISH || env === "standalone",
+              overwrite(requiredVersion, filename) {
+                if (requiredVersion === 7) requiredVersion = "^7.0.0-0";
+                if (process.env.BABEL_8_BREAKING) {
+                  return packageJson.version;
+                }
+                const match = filename.match(/packages[\\/](.+?)[\\/]/);
+                if (
+                  match &&
+                  babel7_8compat["babel7plugins-babel8core"].includes(match[1])
+                ) {
+                  return `${requiredVersion} || >8.0.0-alpha <8.0.0-beta`;
+                }
+              },
+            },
+          ],
+
           needsPolyfillsForOldNode && pluginPolyfillsOldNode,
         ].filter(Boolean),
       },
@@ -302,10 +329,6 @@ module.exports = function (api) {
         test: unambiguousSources.map(normalize),
         sourceType: "unambiguous",
       },
-      env === "standalone" && {
-        test: /chalk/,
-        plugins: [pluginReplaceNavigator],
-      },
     ].filter(Boolean),
   };
 
@@ -340,7 +363,9 @@ function importInteropSrc(source, filename) {
     source.startsWith("@babel/compat-data/") ||
     source.includes("babel-eslint-shared-fixtures/utils") ||
     (source.includes("../data/") &&
-      /babel-preset-env[\\/]src[\\/]/.test(filename))
+      /babel-preset-env[\\/]src[\\/]/.test(filename)) ||
+    // For JSON modules, the default export is the whole module
+    source.endsWith(".json")
   ) {
     return "node";
   }
@@ -477,6 +502,50 @@ function pluginPolyfillsOldNode({ template, types: t }) {
       // https://github.com/nodejs/node/blob/main/doc/changelogs/CHANGELOG_V16.md#v8-93
       replacement: template`hasOwnProperty.call`,
     },
+    {
+      name: "Object.entries",
+      necessary({ parent, node }) {
+        // To avoid infinite replacement loops
+        return !t.isLogicalExpression(parent, { operator: "||", left: node });
+      },
+      supported: path =>
+        path.parentPath.isCallExpression({ callee: path.node }),
+      replacement: template`Object.entries || (o => Object.keys(o).map(k => [k, o[k]]))`,
+    },
+    {
+      name: "fs.rmSync",
+      necessary({ node, parent }) {
+        // To avoid infinite replacement loops
+        return !t.isLogicalExpression(parent, { operator: "||", left: node });
+      },
+      supported({ parent: { arguments: args } }) {
+        return (
+          t.isObjectExpression(args[1]) &&
+          args[1].properties.length === 2 &&
+          t.isIdentifier(args[1].properties[0].key, { name: "force" }) &&
+          t.isBooleanLiteral(args[1].properties[0].value, { value: true }) &&
+          t.isIdentifier(args[1].properties[1].key, { name: "recursive" }) &&
+          t.isBooleanLiteral(args[1].properties[1].value, { value: true })
+        );
+      },
+      // fs.rmSync has been introduced in Node.js 14.14
+      // https://nodejs.org/api/fs.html#fsrmsyncpath-options
+      replacement: template`
+        fs.rmSync || function d(/* path */ p) {
+            if (fs.existsSync(p)) {
+              fs.readdirSync(p).forEach(function (f) {
+                const /* currentPath */ c = p + "/" + f;
+                if (fs.lstatSync(c).isDirectory()) {
+                  d(c);
+                } else {
+                  fs.unlinkSync(c);
+                }
+              });
+              fs.rmdirSync(p);
+            }
+          }
+      `,
+    },
   ];
 
   return {
@@ -488,7 +557,8 @@ function pluginPolyfillsOldNode({ template, types: t }) {
           if (!polyfill.necessary(path)) return;
           if (!polyfill.supported(path)) {
             throw path.buildCodeFrameError(
-              `This '${polyfill.name}' usage is not supported by the inline polyfill.`
+              `This '${polyfill.name}' usage is not supported by the inline polyfill.\n` +
+                path.parentPath.toString()
             );
           }
 
@@ -503,7 +573,7 @@ function pluginPolyfillsOldNode({ template, types: t }) {
 
 /**
  * @param {import("@babel/core")} pluginAPI
- * @returns {import("@babel/core").PluginObj}
+ * @returns {import("@babel/core").PluginObject}
  */
 function pluginToggleBooleanFlag({ types: t }, { name, value }) {
   if (typeof value !== "boolean") throw new Error(`.value must be a boolean`);
@@ -596,10 +666,10 @@ function pluginToggleBooleanFlag({ types: t }, { name, value }) {
         }
       },
       LogicalExpression(path) {
-        const res = evaluate(path.get("test"));
+        const res = evaluate(path);
         if (res.unrelated) return;
         if (res.replacement) {
-          path.get("test").replaceWith(res.replacement);
+          path.replaceWith(res.replacement);
         } else {
           path.replaceWith(t.booleanLiteral(res.value));
         }
@@ -664,6 +734,51 @@ function pluginPackageJsonMacro({ types: t }) {
   };
 }
 
+function pluginRequiredVersionMacro({ types: t }, { allowAny, overwrite }) {
+  const fnName = "REQUIRED_VERSION";
+
+  return {
+    visitor: {
+      ReferencedIdentifier(path) {
+        if (path.isIdentifier({ name: fnName })) {
+          throw path.buildCodeFrameError(
+            `"${fnName}" is only supported in call expressions.`
+          );
+        }
+      },
+      CallExpression(path) {
+        if (!path.get("callee").isIdentifier({ name: fnName })) return;
+
+        if (path.node.arguments.length !== 1) {
+          throw path.buildCodeFrameError(
+            `"${fnName}" expects exactly one argument.`
+          );
+        }
+
+        const arg = path.get("arguments.0").evaluate().value;
+        if (!arg) {
+          throw path.buildCodeFrameError(
+            `"${fnName}" expects a literal argument.`
+          );
+        }
+
+        if (allowAny) {
+          path.replaceWith(t.stringLiteral("*"));
+          return;
+        }
+
+        const version = overwrite(arg, this.filename);
+        if (version != null) {
+          path.replaceWith(t.stringLiteral(version));
+          return;
+        }
+
+        path.replaceWith(path.node.arguments[0]);
+      },
+    },
+  };
+}
+
 // transform `import { x } from "@babel/types"` to `import * as _t from "@babel/types"; const { x } = _t;
 function transformNamedBabelTypesImportToDestructuring({
   types: {
@@ -714,7 +829,7 @@ function transformNamedBabelTypesImportToDestructuring({
 
 /**
  * @param {import("@babel/core")} pluginAPI
- * @returns {import("@babel/core").PluginObj}
+ * @returns {import("@babel/core").PluginObject}
  */
 function pluginImportMetaUrl({ types: t, template }) {
   const isImportMeta = node =>
@@ -824,6 +939,7 @@ function pluginImportMetaUrl({ types: t, template }) {
   };
 }
 
+/** @returns {import("@babel/core").PluginObject} */
 function pluginReplaceTSImportExtension() {
   return {
     visitor: {
@@ -834,7 +950,9 @@ function pluginReplaceTSImportExtension() {
         }
       },
       TSImportEqualsDeclaration({ node }) {
-        const { expression } = node.moduleReference;
+        const { moduleReference } = node;
+        if (moduleReference.type !== "TSExternalModuleReference") return;
+        const { expression } = moduleReference;
         expression.value = expression.value.replace(/(\.[mc]?)ts$/, "$1js");
       },
     },
@@ -952,7 +1070,7 @@ function pluginInjectNodeReexportsHints({ types: t, template }, { names }) {
 
 /**
  * @param {import("@babel/core")} pluginAPI
- * @returns {import("@babel/core").PluginObj}
+ * @returns {import("@babel/core").PluginObject}
  */
 function pluginGeneratorOptimization({ types: t }) {
   return {
@@ -972,30 +1090,13 @@ function pluginGeneratorOptimization({ types: t }) {
               t.isStringLiteral(args[0])
             ) {
               const str = args[0].value;
-              if (str.length == 1) {
+              if (str.length === 1) {
                 node.callee.property.name = "tokenChar";
                 args[0] = t.numericLiteral(str.charCodeAt(0));
               }
             }
           }
         },
-      },
-    },
-  };
-}
-
-function pluginReplaceNavigator({ template }) {
-  return {
-    visitor: {
-      MemberExpression(path) {
-        const object = path.get("object");
-        if (object.isIdentifier({ name: "navigator" })) {
-          object.replaceWith(
-            template.expression.ast`
-              typeof navigator == "object" ? navigator : {}
-            `
-          );
-        }
       },
     },
   };

@@ -18,7 +18,7 @@ import {
   overlappingPlugins,
 } from "./plugins-compat-data.ts";
 
-import type { CallerMetadata } from "@babel/core";
+import type { CallerMetadata, PresetAPI } from "@babel/core";
 
 import _pluginCoreJS3 from "babel-plugin-polyfill-corejs3";
 // TODO(Babel 8): Just use the default import
@@ -37,6 +37,7 @@ import availablePlugins from "./available-plugins.ts";
 import { declarePreset } from "@babel/helper-plugin-utils";
 
 import type { BuiltInsOption, ModuleOption, Options } from "./types.ts";
+export type { Options };
 
 // TODO: Remove in Babel 8
 export function isPluginRequired(targets: Targets, support: Targets) {
@@ -59,28 +60,24 @@ function filterStageFromList(
   }, {});
 }
 
-const pluginLists = {
-  withProposals: {
-    withoutBugfixes: pluginsList,
-    withBugfixes: Object.assign({}, pluginsList, pluginsBugfixesList),
-  },
-  withoutProposals: {
-    withoutBugfixes: filterStageFromList(pluginsList, proposalPlugins),
-    withBugfixes: filterStageFromList(
-      Object.assign({}, pluginsList, pluginsBugfixesList),
-      proposalPlugins,
-    ),
-  },
-};
+const pluginsListWithProposals = Object.assign(
+  {},
+  pluginsList,
+  pluginsBugfixesList,
+);
+const pluginsListWithuotProposals = filterStageFromList(
+  pluginsListWithProposals,
+  proposalPlugins,
+);
 
-function getPluginList(proposals: boolean, bugfixes: boolean) {
-  if (proposals) {
-    if (bugfixes) return pluginLists.withProposals.withBugfixes;
-    else return pluginLists.withProposals.withoutBugfixes;
-  } else {
-    if (bugfixes) return pluginLists.withoutProposals.withBugfixes;
-    else return pluginLists.withoutProposals.withoutBugfixes;
-  }
+if (!process.env.BABEL_8_BREAKING) {
+  // eslint-disable-next-line no-var
+  var pluginsListNoBugfixesWithProposals = pluginsList;
+  // eslint-disable-next-line no-var
+  var pluginsListNoBugfixesWithoutProposals = filterStageFromList(
+    pluginsList,
+    proposalPlugins,
+  );
 }
 
 const getPlugin = (pluginName: string) => {
@@ -100,7 +97,7 @@ const getPlugin = (pluginName: string) => {
 export const transformIncludesAndExcludes = (opts: Array<string>): any => {
   return opts.reduce(
     (result, opt) => {
-      const target = opt.match(/^(es|es6|es7|esnext|web)\./)
+      const target = /^(?:es|es6|es7|esnext|web)\./.test(opt)
         ? "builtIns"
         : "plugins";
       result[target].add(opt);
@@ -117,6 +114,7 @@ export const transformIncludesAndExcludes = (opts: Array<string>): any => {
 function getSpecialModulesPluginNames(
   modules: Exclude<ModuleOption, "auto">,
   shouldTransformDynamicImport: boolean,
+  babelVersion: string,
 ) {
   const modulesPluginNames = [];
   if (modules) {
@@ -134,7 +132,7 @@ function getSpecialModulesPluginNames(
     }
   }
 
-  if (!process.env.BABEL_8_BREAKING) {
+  if (!process.env.BABEL_8_BREAKING && babelVersion[0] !== "8") {
     // Enable module-related syntax plugins for older Babel versions
     if (!shouldTransformDynamicImport) {
       modulesPluginNames.push("syntax-dynamic-import");
@@ -275,6 +273,7 @@ function getLocalTargets(
   ignoreBrowserslistConfig: boolean,
   configPath: string,
   browserslistEnv: string,
+  api: PresetAPI,
 ) {
   if (optionsTargets?.esmodules && optionsTargets.browsers) {
     console.warn(`
@@ -287,6 +286,9 @@ function getLocalTargets(
     ignoreBrowserslistConfig,
     configPath,
     browserslistEnv,
+    onBrowserslistConfigFound(config) {
+      api.addExternalDependency(config);
+    },
   });
 }
 
@@ -309,11 +311,7 @@ function supportsExportNamespaceFrom(caller: CallerMetadata | undefined) {
 }
 
 export default declarePreset((api, opts: Options) => {
-  api.assertVersion(
-    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
-      ? PACKAGE_JSON.version
-      : 7,
-  );
+  api.assertVersion(REQUIRED_VERSION(7));
 
   const babelTargets = api.targets();
 
@@ -326,7 +324,6 @@ export default declarePreset((api, opts: Options) => {
   }
 
   const {
-    bugfixes,
     configPath,
     debug,
     exclude: optionsExclude,
@@ -343,7 +340,7 @@ export default declarePreset((api, opts: Options) => {
 
   if (!process.env.BABEL_8_BREAKING) {
     // eslint-disable-next-line no-var
-    var { loose, spec = false } = opts;
+    var { loose, spec = false, bugfixes = false } = opts;
   }
 
   let targets = babelTargets;
@@ -380,6 +377,7 @@ option \`forceAllTransforms: true\` instead.
       ignoreBrowserslistConfig,
       configPath,
       browserslistEnv,
+      api,
     );
   }
 
@@ -394,7 +392,14 @@ option \`forceAllTransforms: true\` instead.
   const include = transformIncludesAndExcludes(optionsInclude);
   const exclude = transformIncludesAndExcludes(optionsExclude);
 
-  const compatData = getPluginList(shippedProposals, bugfixes);
+  const compatData =
+    process.env.BABEL_8_BREAKING || bugfixes
+      ? shippedProposals
+        ? pluginsListWithProposals
+        : pluginsListWithuotProposals
+      : shippedProposals
+        ? pluginsListNoBugfixesWithProposals
+        : pluginsListNoBugfixesWithoutProposals;
   const modules =
     optionsModules === "auto"
       ? api.caller(supportsStaticESM)
@@ -423,7 +428,11 @@ option \`forceAllTransforms: true\` instead.
     include.plugins,
     exclude.plugins,
     transformTargets,
-    getSpecialModulesPluginNames(modules, shouldTransformDynamicImport),
+    getSpecialModulesPluginNames(
+      modules,
+      shouldTransformDynamicImport,
+      api.version,
+    ),
     process.env.BABEL_8_BREAKING || !loose
       ? undefined
       : ["transform-typeof-symbol"],
@@ -483,7 +492,10 @@ option \`forceAllTransforms: true\` instead.
           },
         ];
       }
-      if (pluginName === "syntax-import-attributes") {
+      if (
+        !process.env.BABEL_8_BREAKING &&
+        pluginName === "syntax-import-attributes"
+      ) {
         // For backward compatibility with the import-assertions plugin, we
         // allow the deprecated `assert` keyword.
         // TODO(Babel 8): Revisit this.

@@ -22,10 +22,14 @@
               "raw": "\"foo\""
             },
             "value": "foo"
-          }
+          },
+          "options": null
         }
       }
     ],
-    "directives": []
+    "directives": [],
+    "extra": {
+      "topLevelAwait": false
+    }
   }
 }

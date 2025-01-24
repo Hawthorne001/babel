@@ -52,7 +52,7 @@ export default {
   DeclarationMissingInitializer: ({
     kind,
   }: {
-    kind: "const" | "destructuring";
+    kind: "await using" | "const" | "destructuring" | "using";
   }) => `Missing initializer in ${kind} declaration.`,
   DecoratorArgumentsOutsideParentheses:
     "Decorator arguments must be moved inside parentheses: use '@(decorator(args))' instead of '@(decorator)(args)'.",
@@ -117,15 +117,10 @@ export default {
     "Illegal 'use strict' directive in function with non-simple parameter list.",
   IllegalReturn: "'return' outside of function.",
   ImportAttributesUseAssert:
-    "The `assert` keyword in import attributes is deprecated and it has been replaced by the `with` keyword. You can enable the `deprecatedAssertSyntax: true` option in the import attributes plugin to suppress this error.",
+    "The `assert` keyword in import attributes is deprecated and it has been replaced by the `with` keyword. You can enable the `deprecatedImportAssert` parser plugin to suppress this error.",
   ImportBindingIsString: ({ importName }: { importName: string }) =>
     `A string literal cannot be used as an imported binding.\n- Did you mean \`import { "${importName}" as foo }\`?`,
-  ImportCallArgumentTrailingComma:
-    "Trailing comma is disallowed inside import(...) arguments.",
-  ImportCallArity: ({ maxArgumentCount }: { maxArgumentCount: 1 | 2 }) =>
-    `\`import()\` requires exactly ${
-      maxArgumentCount === 1 ? "one argument" : "one or two arguments"
-    }.`,
+  ImportCallArity: `\`import()\` requires exactly one or two arguments.`,
   ImportCallNotNewExpression: "Cannot use new with import(...).",
   ImportCallSpreadArgument: "`...` is not allowed in `import()`.",
   ImportJSONBindingNotDefault:
@@ -313,6 +308,7 @@ export default {
   UnterminatedRegExp: "Unterminated regular expression.",
   UnterminatedString: "Unterminated string constant.",
   UnterminatedTemplate: "Unterminated template.",
+  UsingDeclarationExport: "Using declaration cannot be exported.",
   UsingDeclarationHasBindingPattern:
     "Using declaration cannot have destructuring patterns.",
   VarRedeclaration: ({ identifierName }: { identifierName: string }) =>

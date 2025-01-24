@@ -20,7 +20,6 @@ const toBigInt = global.BigInt || (() => null);
 
 const SerializationKey = "$$ babel internal serialized type";
 
-/* eslint-disable no-confusing-arrow */
 export const deserialize = (filename, options, string) =>
   withErrors(
     options.throws,
@@ -68,15 +67,15 @@ function withErrors(throws, ast) {
 // we can test that too.
 const ErrorPrefixRegExp = /^[A-Za-z]*Error:\s/;
 const toError = message =>
-  /^Error/.test(message.replace(ErrorPrefixRegExp, ""))
+  message.replace(ErrorPrefixRegExp, "").startsWith("Error")
     ? Error(message.replace(ErrorPrefixRegExp, ""))
     : SyntaxError(message.replace(ErrorPrefixRegExp, ""));
 
-const LocRegExp = /"loc":(\s*\{(?:[^}{]+|\{(?:[^}{]+|\([^}{]*\})*\})*\})/gm;
-const StartEndRegExp = /("(start|end)":\s*(\d+),\s*){2}/gm;
+const LocRegExp = /"loc":(\s*\{(?:[^}{]|\{(?:[^}{(]|\([^}{]*\})*\})*\})/g;
+const StartEndRegExp = /("(start|end)":\s*(\d+),\s*){2}/g;
 const CompactRegExp = new RegExp(
   `${StartEndRegExp.source}${LocRegExp.source}`,
-  "gm",
+  "g",
 );
 
 export function serialize(value) {
@@ -95,7 +94,7 @@ export function serialize(value) {
   const serialized = stringify(value, encode, 2).replace(
     CompactRegExp,
     // This is safe since none of the values can have spaces in them.
-    string => string.replace(/\s+/gm, () => ""),
+    string => string.replace(/\s+/g, () => ""),
   );
 
   return [extended, serialized];

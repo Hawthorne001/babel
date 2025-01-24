@@ -10,9 +10,9 @@ import presetEnv from "@babel/preset-env";
 import pluginSyntaxFlow from "@babel/plugin-syntax-flow";
 import pluginSyntaxJSX from "@babel/plugin-syntax-jsx";
 import pluginFlowStripTypes from "@babel/plugin-transform-flow-strip-types";
-import { itBabel8, commonJS } from "$repo-utils";
+import { itBabel8, commonJS, IS_BABEL_8, USE_ESM } from "$repo-utils";
 
-const { __dirname } = commonJS(import.meta.url);
+const { __dirname, require } = commonJS(import.meta.url);
 const cwd = __dirname;
 
 function assertIgnored(result) {
@@ -222,6 +222,7 @@ describe("api", function () {
     // keep user options untouched
     expect(options).toEqual({ babelrc: false });
   });
+
   it("transformFile throws on undefined callback", () => {
     const options = {
       babelrc: false,
@@ -362,13 +363,23 @@ describe("api", function () {
   it("options merge backwards", async function () {
     const result = await transformAsync("", {
       cwd,
-      presets: ["@babel/preset-env"],
-      plugins: ["@babel/plugin-syntax-jsx"],
+      presets: [
+        () => ({
+          plugins: [() => ({ name: "plugin-4" }), () => ({ name: "plugin-5" })],
+        }),
+        () => ({
+          plugins: [() => ({ name: "plugin-2" }), () => ({ name: "plugin-3" })],
+        }),
+      ],
+      plugins: [() => ({ name: "plugin-0" }), () => ({ name: "plugin-1" })],
     });
 
-    expect(result.options.plugins[0].manipulateOptions.toString()).toEqual(
-      expect.stringContaining("jsx"),
-    );
+    expect(result.options.plugins[0].key).toBe("plugin-0");
+    expect(result.options.plugins[1].key).toBe("plugin-1");
+    expect(result.options.plugins[2].key).toBe("plugin-2");
+    expect(result.options.plugins[3].key).toBe("plugin-3");
+    expect(result.options.plugins[4].key).toBe("plugin-4");
+    expect(result.options.plugins[5].key).toBe("plugin-5");
   });
 
   it("option wrapPluginVisitorMethod", function () {
@@ -840,24 +851,6 @@ describe("api", function () {
   });
 
   describe("buildExternalHelpers", function () {
-    describe("smoke tests", function () {
-      it("builds external helpers in global output type", function () {
-        babel.buildExternalHelpers(null, "global");
-      });
-
-      it("builds external helpers in module output type", function () {
-        babel.buildExternalHelpers(null, "module");
-      });
-
-      it("builds external helpers in umd output type", function () {
-        babel.buildExternalHelpers(null, "umd");
-      });
-
-      it("builds external helpers in var output type", function () {
-        babel.buildExternalHelpers(null, "var");
-      });
-    });
-
     it("all", function () {
       const script = babel.buildExternalHelpers();
       expect(script).toEqual(expect.stringContaining("classCallCheck"));
@@ -879,6 +872,88 @@ describe("api", function () {
     it("underscored", function () {
       const script = babel.buildExternalHelpers(["typeof"]);
       expect(script).toEqual(expect.stringContaining("typeof"));
+    });
+
+    describe("output types", function () {
+      it("global", function () {
+        const script = babel.buildExternalHelpers(["get"], "global");
+        expect(script).toMatchInlineSnapshot(`
+          "(function (global) {
+            var babelHelpers = global.babelHelpers = {};
+            function _get() {
+              return babelHelpers.get = _get = \\"undefined\\" != typeof Reflect && Reflect.get ? Reflect.get.bind() : function (e, t, r) {
+                var p = babelHelpers.superPropBase(e, t);
+                if (p) {
+                  var n = Object.getOwnPropertyDescriptor(p, t);
+                  return n.get ? n.get.call(arguments.length < 3 ? e : r) : n.value;
+                }
+              }, _get.apply(null, arguments);
+            }
+            babelHelpers.get = _get;
+          })(typeof global === \\"undefined\\" ? self : global);"
+        `);
+      });
+
+      it("umd", function () {
+        const script = babel.buildExternalHelpers(["get"], "umd");
+        expect(script).toMatchInlineSnapshot(`
+          "(function (root, factory) {
+            if (typeof define === \\"function\\" && define.amd) {
+              define([\\"exports\\"], factory);
+            } else if (typeof exports === \\"object\\") {
+              factory(exports);
+            } else {
+              factory(root.babelHelpers = {});
+            }
+          })(this, function (global) {
+            var babelHelpers = global;
+            function _get() {
+              return babelHelpers.get = _get = \\"undefined\\" != typeof Reflect && Reflect.get ? Reflect.get.bind() : function (e, t, r) {
+                var p = babelHelpers.superPropBase(e, t);
+                if (p) {
+                  var n = Object.getOwnPropertyDescriptor(p, t);
+                  return n.get ? n.get.call(arguments.length < 3 ? e : r) : n.value;
+                }
+              }, _get.apply(null, arguments);
+            }
+            babelHelpers.get = _get;
+          });"
+        `);
+      });
+
+      it("var", function () {
+        const script = babel.buildExternalHelpers(["get"], "var");
+        expect(script).toMatchInlineSnapshot(`
+          "var babelHelpers = {};
+          function _get() {
+            return babelHelpers.get = _get = \\"undefined\\" != typeof Reflect && Reflect.get ? Reflect.get.bind() : function (e, t, r) {
+              var p = babelHelpers.superPropBase(e, t);
+              if (p) {
+                var n = Object.getOwnPropertyDescriptor(p, t);
+                return n.get ? n.get.call(arguments.length < 3 ? e : r) : n.value;
+              }
+            }, _get.apply(null, arguments);
+          }
+          babelHelpers.get = _get;
+          babelHelpers;"
+        `);
+      });
+
+      it("module", function () {
+        const script = babel.buildExternalHelpers(["get"], "module");
+        expect(script).toMatchInlineSnapshot(`
+          "export { _get as get };
+          function _get() {
+            return _get = \\"undefined\\" != typeof Reflect && Reflect.get ? Reflect.get.bind() : function (e, t, r) {
+              var p = _superPropBase(e, t);
+              if (p) {
+                var n = Object.getOwnPropertyDescriptor(p, t);
+                return n.get ? n.get.call(arguments.length < 3 ? e : r) : n.value;
+              }
+            }, _get.apply(null, arguments);
+          }"
+        `);
+      });
     });
   });
 
@@ -958,3 +1033,18 @@ describe("api", function () {
     });
   });
 });
+
+if (IS_BABEL_8() && USE_ESM) {
+  describe("cjs-proxy", function () {
+    it("error should be caught", () => {
+      let err;
+      try {
+        const cjs = require("../cjs-proxy.cjs");
+        cjs.parse("foo");
+      } catch (error) {
+        err = error;
+      }
+      expect(err).toBeInstanceOf(Error);
+    });
+  });
+}

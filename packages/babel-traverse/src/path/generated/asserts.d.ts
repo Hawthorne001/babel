@@ -609,6 +609,9 @@ export interface NodePathAssertions {
   assertTSEntityName(
     opts?: Opts<t.TSEntityName>,
   ): asserts this is NodePath<t.TSEntityName>;
+  assertTSEnumBody(
+    opts?: Opts<t.TSEnumBody>,
+  ): asserts this is NodePath<t.TSEnumBody>;
   assertTSEnumDeclaration(
     opts?: Opts<t.TSEnumDeclaration>,
   ): asserts this is NodePath<t.TSEnumDeclaration>;
@@ -720,6 +723,9 @@ export interface NodePathAssertions {
   assertTSSymbolKeyword(
     opts?: Opts<t.TSSymbolKeyword>,
   ): asserts this is NodePath<t.TSSymbolKeyword>;
+  assertTSTemplateLiteralType(
+    opts?: Opts<t.TSTemplateLiteralType>,
+  ): asserts this is NodePath<t.TSTemplateLiteralType>;
   assertTSThisType(
     opts?: Opts<t.TSThisType>,
   ): asserts this is NodePath<t.TSThisType>;

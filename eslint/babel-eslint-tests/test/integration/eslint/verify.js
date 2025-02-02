@@ -1538,7 +1538,7 @@ describe("verify", () => {
       ],
       "script",
       {
-        env: {},
+        globals: {},
         parserOptions: {
           ecmaVersion: 6,
           sourceType: "script",
@@ -1555,7 +1555,7 @@ describe("verify", () => {
       [],
       "script",
       {
-        env: {},
+        globals: {},
         parserOptions: {
           ecmaVersion: 6,
           sourceType: "script",
@@ -1689,7 +1689,7 @@ describe("verify", () => {
         return hasGlobal;
         }
       `,
-      { "newline-before-return": 1 },
+      { "newline-before-return": 1, "no-console": 1 },
     );
   });
 
@@ -1833,6 +1833,41 @@ describe("verify", () => {
             #p: Array<number>
           }`,
           { "no-undef": 1 },
+        );
+      });
+    });
+
+    describe("accessor declarations", () => {
+      it("should not be undefined", () => {
+        verifyAndAssertMessages(
+          `
+              class C {
+                accessor d = 1;
+              }
+          `,
+          { "no-undef": 1 },
+        );
+      });
+
+      it("should not be unused", () => {
+        verifyAndAssertMessages(
+          `
+              export class C {
+                accessor d = 1;
+              }
+          `,
+          { "no-unused-vars": 1 },
+        );
+      });
+
+      it("no-use-before-define allows referencing the class in an accessor", () => {
+        verifyAndAssertMessages(
+          `
+            class C {
+              accessor d = C.name;
+            }
+          `,
+          { "no-use-before-define": 1 },
         );
       });
     });

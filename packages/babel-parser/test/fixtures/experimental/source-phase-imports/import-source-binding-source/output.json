@@ -30,9 +30,13 @@
             "raw": "\"x\""
           },
           "value": "x"
-        }
+        },
+        "attributes": []
       }
     ],
-    "directives": []
+    "directives": [],
+    "extra": {
+      "topLevelAwait": false
+    }
   }
 }

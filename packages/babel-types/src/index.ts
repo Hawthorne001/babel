@@ -13,6 +13,7 @@ export { default as createUnionTypeAnnotation } from "./builders/flow/createFlow
 export { default as createFlowUnionType } from "./builders/flow/createFlowUnionType.ts";
 export { default as createTSUnionType } from "./builders/typescript/createTSUnionType.ts";
 export * from "./builders/generated/index.ts";
+
 export * from "./builders/generated/uppercase.js";
 export * from "./builders/productions.ts";
 
@@ -62,8 +63,10 @@ export { default as removePropertiesDeep } from "./modifications/removePropertie
 export { default as removeTypeDuplicates } from "./modifications/flow/removeTypeDuplicates.ts";
 
 // retrievers
+export { default as getAssignmentIdentifiers } from "./retrievers/getAssignmentIdentifiers.ts";
 export { default as getBindingIdentifiers } from "./retrievers/getBindingIdentifiers.ts";
 export { default as getOuterBindingIdentifiers } from "./retrievers/getOuterBindingIdentifiers.ts";
+export { default as getFunctionName } from "./retrievers/getFunctionName.ts";
 
 // traverse
 export { default as traverse } from "./traverse/traverse.ts";
@@ -111,4 +114,10 @@ if (!process.env.BABEL_8_BREAKING && !USE_ESM && !IS_STANDALONE) {
   exports.toSequenceExpression =
     // eslint-disable-next-line no-restricted-globals
     require("./converters/toSequenceExpression.js").default;
+}
+
+if (!process.env.BABEL_8_BREAKING && process.env.BABEL_TYPES_8_BREAKING) {
+  console.warn(
+    "BABEL_TYPES_8_BREAKING is not supported anymore. Use the latest Babel 8.0.0 pre-release instead!",
+  );
 }

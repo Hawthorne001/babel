@@ -4,10 +4,6 @@ import type * as t from "@babel/types";
 import type { Opts as jsescOptions } from "jsesc";
 import type { Format } from "./printer.ts";
 import type {
-  RecordAndTuplePluginOptions,
-  PipelineOperatorPluginOptions,
-} from "@babel/parser";
-import type {
   EncodedSourceMap,
   DecodedSourceMap,
   Mapping,
@@ -23,11 +19,46 @@ import type {
 function normalizeOptions(
   code: string | { [filename: string]: string },
   opts: GeneratorOptions,
+  ast: t.Node,
 ): Format {
+  if (opts.experimental_preserveFormat) {
+    if (typeof code !== "string") {
+      throw new Error(
+        "`experimental_preserveFormat` requires the original `code` to be passed to @babel/generator as a string",
+      );
+    }
+    if (!opts.retainLines) {
+      throw new Error(
+        "`experimental_preserveFormat` requires `retainLines` to be set to `true`",
+      );
+    }
+    if (opts.compact && opts.compact !== "auto") {
+      throw new Error(
+        "`experimental_preserveFormat` is not compatible with the `compact` option",
+      );
+    }
+    if (opts.minified) {
+      throw new Error(
+        "`experimental_preserveFormat` is not compatible with the `minified` option",
+      );
+    }
+    if (opts.jsescOption) {
+      throw new Error(
+        "`experimental_preserveFormat` is not compatible with the `jsescOption` option",
+      );
+    }
+    if (!Array.isArray((ast as any).tokens)) {
+      throw new Error(
+        "`experimental_preserveFormat` requires the AST to have attatched the token of the input code. Make sure to enable the `tokens: true` parser option.",
+      );
+    }
+  }
+
   const format: Format = {
     auxiliaryCommentBefore: opts.auxiliaryCommentBefore,
     auxiliaryCommentAfter: opts.auxiliaryCommentAfter,
     shouldPrintComment: opts.shouldPrintComment,
+    preserveFormat: opts.experimental_preserveFormat,
     retainLines: opts.retainLines,
     retainFunctionParens: opts.retainFunctionParens,
     comments: opts.comments == null || opts.comments,
@@ -44,7 +75,6 @@ function normalizeOptions(
       minimal: process.env.BABEL_8_BREAKING ? true : false,
       ...opts.jsescOption,
     },
-    recordAndTupleSyntaxType: opts.recordAndTupleSyntaxType ?? "hash",
     topicToken: opts.topicToken,
     importAttributesKeyword: opts.importAttributesKeyword,
   };
@@ -52,6 +82,7 @@ function normalizeOptions(
   if (!process.env.BABEL_8_BREAKING) {
     format.decoratorsBeforeExport = opts.decoratorsBeforeExport;
     format.jsescOption.json = opts.jsonCompatibleStrings;
+    format.recordAndTupleSyntaxType = opts.recordAndTupleSyntaxType ?? "hash";
   }
 
   if (format.minified) {
@@ -79,7 +110,7 @@ function normalizeOptions(
     }
   }
 
-  if (format.compact) {
+  if (format.compact || format.preserveFormat) {
     format.indent.adjustMultilineComment = false;
   }
 
@@ -113,6 +144,14 @@ export interface GeneratorOptions {
    * contains `@preserve` or `@license`.
    */
   shouldPrintComment?(comment: string): boolean;
+
+  /**
+   * Preserve the input code format while printing the transformed code.
+   * This is experimental, and may have breaking changes in future
+   * patch releases. It will be removed in a future minor release,
+   * when it will graduate to stable.
+   */
+  experimental_preserveFormat?: boolean;
 
   /**
    * Attempt to use the same line numbers in the output code as in the source code (helps preserve stack traces).
@@ -190,14 +229,15 @@ export interface GeneratorOptions {
 
   /**
    * For use with the recordAndTuple token.
+   * @deprecated It will be removed in Babel 8.
    */
-  recordAndTupleSyntaxType?: RecordAndTuplePluginOptions["syntaxType"];
+  recordAndTupleSyntaxType?: "bar" | "hash";
 
   /**
    * For use with the Hack-style pipe operator.
    * Changes what token is used for pipe bodies’ topic references.
    */
-  topicToken?: PipelineOperatorPluginOptions["topicToken"];
+  topicToken?: "%" | "#" | "@@" | "^^" | "^";
 
   /**
    * The import attributes syntax style:
@@ -229,7 +269,7 @@ if (!process.env.BABEL_8_BREAKING && !USE_ESM) {
     private _map: SourceMap | null;
     constructor(ast: t.Node, opts: GeneratorOptions = {}, code?: string) {
       this._ast = ast;
-      this._format = normalizeOptions(code, opts);
+      this._format = normalizeOptions(code, opts, ast);
       this._map = opts.sourceMaps ? new SourceMap(opts, code) : null;
     }
     generate(): GeneratorResult {
@@ -252,10 +292,15 @@ export default function generate(
   opts: GeneratorOptions = {},
   code?: string | { [filename: string]: string },
 ): GeneratorResult {
-  const format = normalizeOptions(code, opts);
+  const format = normalizeOptions(code, opts, ast);
   const map = opts.sourceMaps ? new SourceMap(opts, code) : null;
 
-  const printer = new Printer(format, map);
+  const printer = new Printer(
+    format,
+    map,
+    (ast as any).tokens,
+    typeof code === "string" ? code : null,
+  );
 
   return printer.generate(ast);
 }

@@ -1,22 +1,20 @@
-var _initClass;
+let _initClass;
 const dec = () => {};
 let hasX, hasA, hasM;
 let _Foo;
 new class extends babelHelpers.identity {
-  static {
-    class Foo {
-      static {
-        [_Foo, _initClass] = babelHelpers.applyDecs2301(this, [], [dec]).c;
-      }
-      static get a() {
-        return this.#B;
-      }
-      static set a(v) {
-        this.#B = v;
-      }
-      static m() {}
+  static [class Foo {
+    static {
+      [_Foo, _initClass] = babelHelpers.applyDecs2301(this, [], [dec]).c;
     }
-  }
+    static get a() {
+      return this.#B;
+    }
+    static set a(v) {
+      this.#B = v;
+    }
+    static m() {}
+  }];
   #x;
   #A;
   get #a() {

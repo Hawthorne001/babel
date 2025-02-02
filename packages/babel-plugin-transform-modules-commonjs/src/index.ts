@@ -9,10 +9,9 @@ import {
   wrapInterop,
   getModuleName,
 } from "@babel/helper-module-transforms";
-import simplifyAccess from "@babel/helper-simple-access";
-import { template, types as t, type PluginPass } from "@babel/core";
+import { template, types as t } from "@babel/core";
+import type { PluginPass, Visitor, Scope, NodePath } from "@babel/core";
 import type { PluginOptions } from "@babel/helper-module-transforms";
-import type { Visitor, Scope, NodePath } from "@babel/traverse";
 
 import { transformDynamicImport } from "./dynamic-import.ts";
 import { lazyImportsHook } from "./lazy.ts";
@@ -34,11 +33,7 @@ export interface Options extends PluginOptions {
 }
 
 export default declare((api, options: Options) => {
-  api.assertVersion(
-    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
-      ? PACKAGE_JSON.version
-      : 7,
-  );
+  api.assertVersion(REQUIRED_VERSION(7));
 
   const {
     // 'true' for imports to strictly have .default, instead of having
@@ -125,7 +120,8 @@ export default declare((api, options: Options) => {
 
       path.replaceWith(
         t.assignmentExpression(
-          path.node.operator[0] + "=",
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+          (path.node.operator[0] + "=") as t.AssignmentExpression["operator"],
           arg.node,
           getAssertion(localName),
         ),
@@ -150,14 +146,14 @@ export default declare((api, options: Options) => {
         );
       } else if (left.isPattern()) {
         const ids = left.getOuterBindingIdentifiers();
-        const localName = Object.keys(ids).filter(localName => {
+        const localName = Object.keys(ids).find(localName => {
           if (localName !== "module" && localName !== "exports") return false;
 
           return (
             this.scope.getBinding(localName) ===
             path.scope.getBinding(localName)
           );
-        })[0];
+        });
 
         if (localName) {
           const right = path.get("right");
@@ -211,12 +207,6 @@ export default declare((api, options: Options) => {
           // These objects are specific to CommonJS and are not available in
           // real ES6 implementations.
           if (!allowCommonJSExports) {
-            if (process.env.BABEL_8_BREAKING) {
-              simplifyAccess(path, new Set(["module", "exports"]));
-            } else {
-              // @ts-ignore(Babel 7 vs Babel 8) The third param has been removed in Babel 8.
-              simplifyAccess(path, new Set(["module", "exports"]), false);
-            }
             path.traverse(moduleExportsVisitor, {
               scope: path.scope,
             });
@@ -297,7 +287,7 @@ export default declare((api, options: Options) => {
           ensureStatementsHoisted(headers);
           path.unshiftContainer("body", headers);
           path.get("body").forEach(path => {
-            if (headers.indexOf(path.node) === -1) return;
+            if (!headers.includes(path.node)) return;
             if (path.isVariableDeclaration()) {
               path.scope.registerDeclaration(path);
             }

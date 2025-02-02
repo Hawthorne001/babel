@@ -19,6 +19,7 @@ import * as fs from "../../gensync-utils/fs.ts";
 
 import { createRequire } from "module";
 import { endHiddenCallStack } from "../../errors/rewrite-stack-trace.ts";
+import { isAsync } from "../../gensync-utils/async.ts";
 const require = createRequire(import.meta.url);
 
 const debug = buildDebug("babel:config:loading:files:configuration");
@@ -53,11 +54,11 @@ const runConfig = makeWeakCache(function* runConfig(
   options: InputOptions | null;
   cacheNeedsConfiguration: boolean;
 }> {
-  // @ts-expect-error - if we want to make it possible to use async configs
+  // if we want to make it possible to use async configs
   yield* [];
 
   return {
-    options: endHiddenCallStack(options as any as (api: ConfigAPI) => {})(
+    options: endHiddenCallStack(options as any as (api: ConfigAPI) => unknown)(
       makeConfigAPI(cache),
     ),
     cacheNeedsConfiguration: !cache.configured(),
@@ -72,8 +73,12 @@ function* readConfigCode(
 
   let options = yield* loadCodeDefault(
     filepath,
+    (yield* isAsync()) ? "auto" : "require",
     "You appear to be using a native ECMAScript module configuration " +
-      "file, which is only supported when running Babel asynchronously.",
+      "file, which is only supported when running Babel asynchronously " +
+      "or when using the Node.js `--experimental-require-module` flag.",
+    "You appear to be using a configuration file that contains top-level " +
+      "await, which is only supported when running Babel asynchronously.",
   );
 
   let cacheNeedsConfiguration = false;
@@ -90,10 +95,8 @@ function* readConfigCode(
 
   // @ts-expect-error todo(flow->ts)
   if (typeof options.then === "function") {
-    // @ts-expect-error We use ?. in case options is a thenable
-    // but not a promise
+    // @ts-expect-error We use ?. in case options is a thenable but not a promise
     options.catch?.(() => {});
-
     throw new ConfigError(
       `You appear to be using an async configuration, ` +
         `which your current version of Babel does not support. ` +
@@ -141,7 +144,7 @@ const packageToBabelConfig = makeWeakCacheSync(
   (file: ConfigFile): ConfigFile | null => {
     const babel: unknown = file.options["babel"];
 
-    if (typeof babel === "undefined") return null;
+    if (babel === undefined) return null;
 
     if (typeof babel !== "object" || Array.isArray(babel) || babel === null) {
       throw new ConfigError(`.babel property must be an object`, file.filepath);
@@ -188,8 +191,10 @@ const readIgnoreConfig = makeStaticFileCache((filepath, content) => {
   const ignoreDir = path.dirname(filepath);
   const ignorePatterns = content
     .split("\n")
-    .map<string>(line => line.replace(/#(.*?)$/, "").trim())
-    .filter(line => !!line);
+    .map(line =>
+      line.replace(process.env.BABEL_8_BREAKING ? /^#.*$/ : /#.*$/, "").trim(),
+    )
+    .filter(Boolean);
 
   for (const pattern of ignorePatterns) {
     if (pattern[0] === "!") {
@@ -335,7 +340,9 @@ function readConfig(
     case ".js":
     case ".cjs":
     case ".mjs":
+    case ".ts":
     case ".cts":
+    case ".mts":
       return readConfigCode(filepath, { envName, caller });
     default:
       return readConfigJSON5(filepath);

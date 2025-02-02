@@ -1,10 +1,10 @@
 import type { Handler } from "gensync";
-import { parse } from "@babel/parser";
+import { parse, type File as ParseResult } from "@babel/parser";
 import { codeFrameColumns } from "@babel/code-frame";
 import generateMissingPluginMessage from "./util/missing-plugin-helper.ts";
 import type { PluginPasses } from "../config/index.ts";
 
-export type ParseResult = ReturnType<typeof parse>;
+export type { ParseResult };
 
 export default function* parser(
   pluginPasses: PluginPasses,
@@ -27,7 +27,7 @@ export default function* parser(
     if (results.length === 0) {
       return parse(code, parserOpts);
     } else if (results.length === 1) {
-      // @ts-expect-error - If we want to allow async parsers
+      // If we want to allow async parsers
       yield* [];
       if (typeof results[0].then === "function") {
         throw new Error(

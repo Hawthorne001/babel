@@ -19,19 +19,21 @@ function getVisitorValues(nodeType: string, client: Client) {
 
   const { FLOW_FLIPPED_ALIAS_KEYS, VISITOR_KEYS } = client.getTypesInfo();
 
-  const flowFlippedAliasKeys = FLOW_FLIPPED_ALIAS_KEYS.concat([
-    "ArrayPattern",
-    "ClassDeclaration",
-    "ClassExpression",
-    "FunctionDeclaration",
-    "FunctionExpression",
-    "Identifier",
-    "ObjectPattern",
-    "RestElement",
-  ]);
+  const flowFlippedAliasKeys = new Set(
+    FLOW_FLIPPED_ALIAS_KEYS.concat([
+      "ArrayPattern",
+      "ClassDeclaration",
+      "ClassExpression",
+      "FunctionDeclaration",
+      "FunctionExpression",
+      "Identifier",
+      "ObjectPattern",
+      "RestElement",
+    ]),
+  );
 
   visitorKeysMap = Object.entries(VISITOR_KEYS).reduce((acc, [key, value]) => {
-    if (!flowFlippedAliasKeys.includes(value)) {
+    if (!flowFlippedAliasKeys.has(value)) {
       // @ts-expect-error FIXME: value is not assignable to type string[]
       acc[key] = value;
     }
@@ -115,7 +117,14 @@ class Referencer extends OriginalReferencer {
 
     // Flow super types.
     this._visitTypeAnnotation(node.implements);
-    this._visitTypeAnnotation(node.superTypeParameters?.params);
+    this._visitTypeAnnotation(
+      (process.env.BABEL_8_BREAKING
+        ? // @ts-ignore(Babel 7 vs Babel 8) Renamed
+          node.superTypeArguments
+        : // @ts-ignore(Babel 7 vs Babel 8) Renamed
+          node.superTypeParameters
+      )?.params,
+    );
 
     // Basic.
     super.visitClass(node);
@@ -182,6 +191,10 @@ class Referencer extends OriginalReferencer {
   }
 
   ClassPrivateProperty(node: any) {
+    this._visitClassProperty(node);
+  }
+
+  ClassAccessorProperty(node: any) {
     this._visitClassProperty(node);
   }
 

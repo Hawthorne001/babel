@@ -1,4 +1,5 @@
-var _initProto, _initClass, _obj, _Foo2;
+var _Foo2;
+let _initProto, _initClass, _obj;
 const dec = () => {};
 let _Foo;
 var _a = /*#__PURE__*/new WeakMap();
@@ -8,13 +9,14 @@ class Foo {
   }
   method() {}
   makeClass() {
-    var _barDecs, _init_bar, _init_extra_bar, _Nested;
-    return _barDecs = babelHelpers.classPrivateFieldGet2(_a, this), (_Nested = class Nested {
+    var _Nested;
+    let _barDecs, _init_bar, _init_extra_bar, _ref;
+    return _ref = (_barDecs = babelHelpers.classPrivateFieldGet2(_a, this), "bar"), _Nested = class Nested {
       constructor() {
-        babelHelpers.defineProperty(this, "bar", _init_bar(this));
+        babelHelpers.defineProperty(this, _ref, _init_bar(this));
         _init_extra_bar(this);
       }
-    }, [_init_bar, _init_extra_bar] = babelHelpers.applyDecs2311(_Nested, [], [[_barDecs, 0, "bar"]]).e, _Nested);
+    }, [_init_bar, _init_extra_bar] = babelHelpers.applyDecs2311(_Nested, [], [[_barDecs, 0, "bar"]]).e, _Nested;
   }
 }
 _Foo2 = Foo;

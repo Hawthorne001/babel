@@ -6,6 +6,8 @@ const { fileURLToPath } = require("url");
 const { createRequire } = require("module");
 const semver = require("semver");
 
+exports.repoRoot = path.resolve(__dirname, "../../");
+
 let USE_ESM = false;
 try {
   const type = readFileSync(
@@ -15,7 +17,11 @@ try {
   USE_ESM = type === "module";
 } catch (_) {}
 
+function bool(value) {
+  return Boolean(value) && value !== "false" && value !== "0";
+}
 exports.USE_ESM = USE_ESM;
+exports.IS_BABEL_8 = () => bool(process.env.BABEL_8_BREAKING);
 
 if (typeof jest !== "undefined") {
   const dummy = () => {};
@@ -31,6 +37,9 @@ if (typeof jest !== "undefined") {
   };
   exports.itGte = function (version) {
     return semver.gte(process.version, version) ? it : dummy;
+  };
+  exports.itLt = function (version) {
+    return semver.lt(process.version, version) ? it : dummy;
   };
   exports.itNoWin32 = process.platform === "win32" ? dummy : it;
   exports.itBabel8 = process.env.BABEL_8_BREAKING ? it : dummy;

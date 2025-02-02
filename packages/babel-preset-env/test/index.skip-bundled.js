@@ -1,5 +1,7 @@
 // eslint-disable-next-line import/extensions
 import compatData from "@babel/compat-data/plugins";
+// eslint-disable-next-line import/extensions
+import bugfixesData from "@babel/compat-data/plugin-bugfixes";
 import * as babel from "@babel/core";
 
 import { USE_ESM, itBabel7, itBabel8, describeBabel7NoESM } from "$repo-utils";
@@ -312,13 +314,27 @@ describe("babel-preset-env", () => {
   });
 
   it("available-plugins is in sync with @babel/compat-data", () => {
-    const arrAvailablePlugins = Object.keys(availablePlugins).sort();
-    const arrCompatData = Object.keys(compatData)
-      // TODO(Babel 8): Remove this .map
-      .map(name => name.replace("proposal-", "transform-"))
+    const arrAvailablePlugins = Object.keys(availablePlugins)
+      .filter(
+        name =>
+          // 1. The syntax plugins are always enabled, they don't have compat-data entries
+          // 2. The modules transforms are for non-ES module systems, they don't have compat-data entries
+          // 3. The dynamic import transform is controlled by the modules option and the API caller support
+          !(
+            name.startsWith("syntax-") ||
+            name.startsWith("transform-modules-") ||
+            name === "transform-dynamic-import"
+          ),
+      )
       .sort();
+    const arrCompatData = [
+      ...Object.keys(compatData),
+      ...Object.keys(bugfixesData),
+    ].sort();
 
-    expect(arrAvailablePlugins).toEqual(expect.arrayContaining(arrCompatData));
+    for (const plugin of arrAvailablePlugins) {
+      expect(arrCompatData).toContain(plugin);
+    }
   });
 
   describe("debug", () => {
@@ -354,6 +370,44 @@ describe("babel-preset-env", () => {
           expect.stringContaining("proposal-"),
         );
       },
+    );
+  });
+
+  it("should add .browserslistrc to external dependencies when configPath is specified", () => {
+    const browserslistConfigFile = require.resolve(
+      "./regressions/.browserslistrc",
+    );
+    const { externalDependencies } = babel.transformSync("", {
+      configFile: false,
+      presets: [
+        [babelPresetEnv.default, { configPath: browserslistConfigFile }],
+      ],
+    });
+    expect(externalDependencies).toContain(browserslistConfigFile);
+  });
+
+  it.todo(
+    "should add .browserslistrc to external dependencies when browserslistConfigFile is specified",
+  );
+
+  describe("when process.env.BROWSERSLIST_CONFIG is specified", () => {
+    afterEach(() => {
+      delete process.env.BROWSERSLIST_CONFIG;
+    });
+    it("should add process.env.BROWSERSLIST_CONFIG to external dependencies using preset-env's resolveTarget", () => {
+      const browserslistConfigFile = require.resolve(
+        "./regressions/.browserslistrc",
+      );
+      process.env.BROWSERSLIST_CONFIG = browserslistConfigFile;
+      const { externalDependencies } = babel.transformSync("", {
+        configFile: false,
+        presets: [[babelPresetEnv.default, { browserslistEnv: "development" }]],
+      });
+      expect(externalDependencies).toContain(browserslistConfigFile);
+    });
+
+    it.todo(
+      "should add process.env.BROWSERSLIST_CONFIG to external dependencies using core's resolveTarget",
     );
   });
 });

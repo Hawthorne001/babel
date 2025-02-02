@@ -5,7 +5,10 @@ const supportsESMAndJestLightRunner = semver.satisfies(
   nodeVersion,
   // ^12.22 || >=14.17 : Node will throw "t.isIdentifier is not a function" when test is running in worker threads.
   // ^13.7: `resolve.exports` specifies conditional exports in package.json
-  "^12.22 || ^13.7 || >=14.17"
+  "^12.22 || ^13.7 || >=14.17",
+  {
+    includePrerelease: true,
+  }
 );
 const isPublishBundle = process.env.IS_PUBLISH;
 
@@ -64,6 +67,9 @@ module.exports = {
     // versions to fail. This test relies on Babel 7.12, so let's skip it.
     ...(process.version === "v20.6.0"
       ? ["/babel-preset-env/test/regressions.js"]
+      : []),
+    ...(!semver.satisfies(nodeVersion, "^18.18.0 || >=20.0")
+      ? ["<rootDir>/eslint/"]
       : []),
   ],
   testEnvironment: "node",

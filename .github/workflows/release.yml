@@ -135,25 +135,28 @@ jobs:
           # is true. Use the empry string instead.
           BABEL_8_BREAKING: ${{ needs.check-release-type.outputs.is-babel-8 == 'true' || '' }}
 
-      - name: Generate babel-types docs
-        continue-on-error: true
-        run: |
-          mkdir build
-          node ./packages/babel-types/scripts/generators/docs.js > ./build/types.md
-
-      - name: Upload babel-types docs
-        continue-on-error: true
-        uses: actions/upload-artifact@v3
-        with:
-          name: babel-types-docs
-          path: build/types.md
-          retention-days: 3
-
       - name: Publish to npm (Babel 7)
         run: yarn release-tool publish --yes
         if: needs.check-release-type.outputs.is-babel-8 == 'false'
         env:
           YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Generate babel-types docs
+        continue-on-error: true
+        if: needs.check-release-type.outputs.is-babel-8 == 'false'
+        run: |
+          mkdir build
+          node ./scripts/set-module-type.js commonjs
+          node ./packages/babel-types/scripts/generators/docs.js > ./build/types.md
+
+      - name: Upload babel-types docs
+        continue-on-error: true
+        if: needs.check-release-type.outputs.is-babel-8 == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: babel-types-docs
+          path: build/types.md
+          retention-days: 3
 
       - name: Publish to npm (Babel 8)
         # --tag-version-prefix must match the one set in `make new-babel-8-version-create-branch`
@@ -298,20 +301,29 @@ jobs:
           fetch-depth: 0 # Otherwise we cannot push
           persist-credentials: false # So that we can push with BOT_TOKEN, otherwise it doesn't trigger CI
       - name: Download babel-types docs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: babel-types-docs
           # Downloaded as ./docs/types.md
           path: docs
       - name: Commit Babel website changes
+        id: prepare-website-changes
         run: |
+          if [[ -z "$(git status --porcelain=v1 2>/dev/null)" ]]
+          then
+            echo "No babel-types docs changes."
+            exit 0
+          else
+            echo "hasChanges=true" >> $GITHUB_OUTPUT
+          fi
+          git checkout -b update-types-docs
           git config user.name "Babel Bot"
           git config user.email "babel-bot@users.noreply.github.com"
-          git checkout -b update-types-docs
           git commit -am "docs: update babel types"
           git push --force "https://babel-bot:${{ secrets.BOT_TOKEN }}@github.com/babel/website.git" update-types-docs
       - name: Create Pull Request
         uses: babel/actions/create-pull-request@v2
+        if: steps.prepare-website-changes.outputs.hasChanges == 'true'
         with:
           token: ${{ secrets.BOT_TOKEN }}
           repository: babel/website

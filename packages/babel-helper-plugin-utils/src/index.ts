@@ -25,17 +25,19 @@ const apiPolyfills: APIPolyfills = {
 if (!process.env.BABEL_8_BREAKING) {
   Object.assign(apiPolyfills, {
     // This is supported starting from Babel 7.13
-    targets: () => () => {
+    targets: () => (): any => {
       return {};
     },
     // This is supported starting from Babel 7.13
-    assumption: () => () => {
+    assumption: () => (): any => {
       return undefined;
     },
+    // This is supported starting from Babel 7.17
+    addExternalDependency: () => () => {},
   });
 }
 
-export function declare<State = {}, Option = {}>(
+export function declare<State = object, Option = object>(
   builder: (
     api: PluginAPI,
     options: Option,
@@ -63,7 +65,7 @@ export function declare<State = {}, Option = {}>(
   };
 }
 
-export const declarePreset = declare as <Option = {}>(
+export const declarePreset = declare as <Option = object>(
   builder: (api: PresetAPI, options: Option, dirname: string) => PresetObject,
 ) => (api: PresetAPI, options: Option, dirname: string) => PresetObject;
 

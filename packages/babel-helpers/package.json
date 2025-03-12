@@ -16,7 +16,7 @@
   "main": "./lib/index.js",
   "dependencies": {
     "@babel/template": "workspace:^",
-    "@babel/traverse": "workspace:^",
+    "@babel/traverse": "7.0.0",
     "@babel/types": "workspace:^"
   },
   "devDependencies": {

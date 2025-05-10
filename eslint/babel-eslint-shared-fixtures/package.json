@@ -13,7 +13,7 @@
     "@babel/plugin-syntax-export-default-from": "workspace:^",
     "@babel/plugin-transform-class-properties": "workspace:^",
     "@babel/plugin-transform-private-methods": "workspace:^",
-    "@babel/preset-env": "workspace:^",
+    "@babel/preset-env": "7.27.1",
     "@babel/preset-flow": "workspace:^",
     "@babel/preset-react": "workspace:^",
     "eslint": "^8.22.0"

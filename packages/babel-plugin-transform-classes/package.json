@@ -15,12 +15,12 @@
   "main": "./lib/index.js",
   "dependencies": {
     "@babel/helper-annotate-as-pure": "workspace:^",
-    "@babel/helper-compilation-targets": "workspace:^",
-    "@babel/helper-environment-visitor": "workspace:^",
+    "@babel/helper-compilation-targets": "7.8.0",
+    "@babel/helper-environment-visitor": "7.16.5",
     "@babel/helper-function-name": "workspace:^",
     "@babel/helper-plugin-utils": "workspace:^",
-    "@babel/helper-replace-supers": "workspace:^",
-    "@babel/helper-split-export-declaration": "workspace:^",
+    "@babel/helper-replace-supers": "7.0.0",
+    "@babel/helper-split-export-declaration": "7.0.0",
     "globals": "condition:BABEL_8_BREAKING ? ^13.5.0 : ^11.1.0"
   },
   "keywords": [

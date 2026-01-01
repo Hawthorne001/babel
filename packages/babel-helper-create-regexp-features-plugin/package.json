@@ -18,7 +18,7 @@
     "babel-plugin"
   ],
   "dependencies": {
-    "@babel/helper-annotate-as-pure": "workspace:^",
+    "@babel/helper-annotate-as-pure": "7.0.0",
     "regexpu-core": "^6.3.1",
     "semver": "^7.7.3"
   },

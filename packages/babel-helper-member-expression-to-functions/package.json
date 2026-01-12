@@ -15,8 +15,8 @@
   "main": "./lib/index.js",
   "author": "The Babel Team (https://babel.dev/team)",
   "dependencies": {
-    "@babel/traverse": "workspace:^",
-    "@babel/types": "workspace:^"
+    "@babel/traverse": "7.23.2",
+    "@babel/types": "7.0.0"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

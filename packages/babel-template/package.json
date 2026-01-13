@@ -17,8 +17,8 @@
   "main": "./lib/index.js",
   "dependencies": {
     "@babel/code-frame": "workspace:^",
-    "@babel/parser": "workspace:^",
-    "@babel/types": "workspace:^"
+    "@babel/parser": "7.0.0",
+    "@babel/types": "7.0.0"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

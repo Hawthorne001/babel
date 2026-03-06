@@ -75,7 +75,7 @@
     "@babel/plugin-transform-unicode-escapes": "workspace:^",
     "@babel/plugin-transform-unicode-property-regex": "workspace:^",
     "@babel/plugin-transform-unicode-regex": "workspace:^",
-    "@babel/plugin-transform-unicode-sets-regex": "workspace:^",
+    "@babel/plugin-transform-unicode-sets-regex": "7.22.0",
     "@babel/preset-modules": "0.1.6-no-external-plugins",
     "babel-plugin-polyfill-corejs3": "^0.14.0",
     "core-js-compat": "^3.48.0",

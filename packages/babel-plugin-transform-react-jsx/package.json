@@ -20,7 +20,7 @@
     "@babel/helper-annotate-as-pure": "workspace:^",
     "@babel/helper-module-imports": "workspace:^",
     "@babel/helper-plugin-utils": "workspace:^",
-    "@babel/plugin-syntax-jsx": "workspace:^",
+    "@babel/plugin-syntax-jsx": "7.0.0",
     "@babel/types": "workspace:^"
   },
   "peerDependencies": {

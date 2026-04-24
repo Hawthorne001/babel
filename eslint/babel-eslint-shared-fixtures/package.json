@@ -4,14 +4,14 @@
   "description": "Shared fixtures for testing @babel/eslint-* packages",
   "private": true,
   "dependencies": {
-    "@babel/core": "workspace:^",
+    "@babel/core": "7.0.0",
     "@babel/eslint-parser": "workspace:^",
     "@babel/plugin-syntax-async-do-expressions": "workspace:^",
     "@babel/plugin-syntax-decorators": "workspace:^",
     "@babel/plugin-syntax-do-expressions": "workspace:^",
     "@babel/plugin-syntax-export-default-from": "workspace:^",
     "@babel/plugin-syntax-jsx": "workspace:^",
-    "@babel/plugin-syntax-pipeline-operator": "workspace:^",
+    "@babel/plugin-syntax-pipeline-operator": "7.0.0",
     "eslint": "^10.0.0"
   },
   "type": "module"

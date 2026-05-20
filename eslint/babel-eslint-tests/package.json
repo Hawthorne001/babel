@@ -6,7 +6,7 @@
   "dependencies": {
     "@babel/core": "workspace:^",
     "@babel/eslint-parser": "workspace:^",
-    "@babel/eslint-plugin": "workspace:^",
+    "@babel/eslint-plugin": "7.11.0",
     "@babel/parser": "workspace:^",
     "@babel/plugin-proposal-decorators": "workspace:^",
     "@babel/plugin-proposal-do-expressions": "workspace:^",

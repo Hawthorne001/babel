@@ -7,7 +7,7 @@
     "@babel/core": "workspace:^",
     "@babel/eslint-parser": "workspace:^",
     "@babel/eslint-plugin": "workspace:^",
-    "@babel/parser": "workspace:^",
+    "@babel/parser": "7.0.0",
     "@babel/plugin-proposal-decorators": "workspace:^",
     "@babel/plugin-proposal-do-expressions": "workspace:^",
     "@babel/preset-flow": "workspace:^",

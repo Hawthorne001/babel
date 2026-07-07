@@ -20,7 +20,7 @@
   ],
   "dependencies": {
     "@babel/parser": "workspace:^",
-    "@babel/types": "workspace:^",
+    "@babel/types": "7.0.0",
     "@jridgewell/gen-mapping": "catalog:",
     "@jridgewell/trace-mapping": "catalog:",
     "@types/jsesc": "^2.5.0",

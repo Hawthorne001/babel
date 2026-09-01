@@ -39,9 +39,9 @@
   },
   "dependencies": {
     "@babel/code-frame": "workspace:^",
-    "@babel/generator": "workspace:^",
+    "@babel/generator": "7.0.0",
     "@babel/helper-compilation-targets": "workspace:^",
-    "@babel/helpers": "workspace:^",
+    "@babel/helpers": "7.0.0",
     "@babel/parser": "workspace:^",
     "@babel/template": "workspace:^",
     "@babel/traverse": "workspace:^",
